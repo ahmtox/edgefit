@@ -186,6 +186,9 @@ def run_sweep(
             store=store,
             policy=policy,
             thresholds=thresholds,
+            # Reuse the decision from wait_until_fit; a second probe here is a
+            # second noisy draw against the same threshold, not more rigour.
+            gate=gate,
         )
         result = str(outcome.record.outcome)
         report.outcomes.append((cell, result))

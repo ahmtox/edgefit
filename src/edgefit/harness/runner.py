@@ -238,15 +238,25 @@ def measure(
     thresholds: GateThresholds | None = None,
     lock_timeout_s: float = 0.0,
     calibrate: bool = True,
+    gate: GateReport | None = None,
 ) -> MeasurementOutcome:
-    """Measure one (recipe, device) pair. Always produces a record."""
+    """Measure one (recipe, device) pair. Always produces a record.
+
+    ``gate`` accepts an already-evaluated gate decision. A sweep waits for a fit
+    host and then passes that result in, because re-probing here would take a
+    second independent noisy draw against a tight threshold — which cost 16 of 45
+    cells in the first full sweep, on a host that was fine both times.
+    """
     policy = policy or MeasurementPolicy()
     device = probe_device()
     baselines = BaselineStore()
 
     with device_lock(device, timeout_s=lock_timeout_s):
-        probe = run_calibration_probe(baselines.get(device)) if calibrate else None
-        gate = evaluate_gate(probe_state(), thresholds, probe)
+        if gate is None:
+            probe = run_calibration_probe(baselines.get(device)) if calibrate else None
+            gate = evaluate_gate(probe_state(), thresholds, probe)
+            if gate.passed_ignoring_probe and probe is not None:
+                baselines.record(device, probe.elapsed_ms)
 
         if not gate.passed:
             record = _failure_record(
@@ -256,10 +266,6 @@ def measure(
                 store.insert_recipe(recipe)
                 store.insert_measurement(record)
             return MeasurementOutcome(record=record, gate=gate)
-
-        # A passing gate means this timing is a legitimate baseline candidate.
-        if probe is not None:
-            baselines.record(device, probe.elapsed_ms)
 
         # --- tier 1: static ---
         analysis = _analyze_in_subprocess(artifact_dir, recipe)

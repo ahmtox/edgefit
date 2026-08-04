@@ -6,6 +6,7 @@ Host conditions are constructed rather than probed, so these tests assert the
 
 from __future__ import annotations
 
+import json
 import multiprocessing
 import time
 
@@ -193,6 +194,13 @@ class TestLoadAverageIsSupersededByTheProbe:
 
 
 class TestBaselineStore:
+    """The baseline must estimate healthy throughput, not the luckiest run ever.
+
+    An all-time minimum is a ratchet. Observed on 2026-08-03: one quiet moment
+    recorded 7.63 ms, the machine's normal healthy figure was ~8.4 ms, and a sweep
+    then lost 16 of 45 cells to a threshold it could no longer reach.
+    """
+
     def test_returns_none_before_anything_is_recorded(self, tmp_path, device) -> None:
         assert BaselineStore(tmp_path / "baselines.json").get(device) is None
 
@@ -201,14 +209,54 @@ class TestBaselineStore:
         store.record(device, 12.5)
         assert store.get(device) == pytest.approx(12.5)
 
-    def test_keeps_the_fastest_time_seen(self, tmp_path, device) -> None:
-        """A baseline captured on a busy machine would permanently soften the gate."""
+    def test_a_single_lucky_sample_does_not_ratchet(self, tmp_path, device) -> None:
+        """The regression this class exists for."""
+        store = BaselineStore(tmp_path / "baselines.json")
+        store.record(device, 7.6)  # the unusually quiet moment
+        for _ in range(12):
+            store.record(device, 8.4)  # normal healthy throughput
+
+        baseline = store.get(device)
+        assert baseline is not None
+        assert baseline > 7.9, f"baseline {baseline} is still pinned to the outlier"
+        assert 8.4 / baseline <= 1.15, "a healthy host must pass its own threshold"
+
+    def test_a_few_slow_samples_do_not_soften_the_gate(self, tmp_path, device) -> None:
+        """The protection the all-time minimum was there to provide."""
+        store = BaselineStore(tmp_path / "baselines.json")
+        for _ in range(10):
+            store.record(device, 8.4)
+        for _ in range(2):
+            store.record(device, 40.0)  # host briefly hammered
+
+        baseline = store.get(device)
+        assert baseline is not None
+        assert baseline < 9.0, f"two slow samples moved the baseline to {baseline}"
+
+    def test_bootstraps_from_the_minimum_while_samples_are_scarce(self, tmp_path, device) -> None:
         store = BaselineStore(tmp_path / "baselines.json")
         store.record(device, 12.5)
-        store.record(device, 40.0)
+        store.record(device, 20.0)
         assert store.get(device) == pytest.approx(12.5)
-        store.record(device, 11.0)
-        assert store.get(device) == pytest.approx(11.0)
+
+    def test_window_is_bounded(self, tmp_path, device) -> None:
+        """Old thermal conditions should not haunt the estimate forever."""
+        store = BaselineStore(tmp_path / "baselines.json")
+        for value in range(BaselineStore.WINDOW * 2):
+            store.record(device, 10.0 + value)
+        assert len(store.samples(device)) == BaselineStore.WINDOW
+
+    def test_migrates_the_original_scalar_format(self, tmp_path, device) -> None:
+        """Real stored baselines are scalars; they must not silently read as absent."""
+        unit = device.model_copy(update={"unit_serial_hash": "4b18a91c71c0"})
+        path = tmp_path / "baselines.json"
+        store = BaselineStore(path)
+        key = f"{unit.sku_id}:{unit.unit_serial_hash}:matmul_f32_1024_x5_v1"
+        path.write_text(json.dumps({key: 7.634166}))
+
+        assert store.get(unit) == pytest.approx(7.634166)
+        store.record(unit, 8.4)
+        assert len(store.samples(unit)) == 2
 
     def test_separates_two_units_of_the_same_sku(self, tmp_path, device) -> None:
         """The two-unit test is meaningless if both units share a baseline."""
@@ -224,6 +272,29 @@ class TestBaselineStore:
         assert store.get(device) is None
         store.record(device, 12.5)
         assert store.get(device) == pytest.approx(12.5)
+
+
+class TestProbeSupersedesButDoesNotSelfSoften:
+    def test_a_probe_failure_alone_still_counts_as_healthy_conditions(self) -> None:
+        """Which is what lets the baseline self-correct out of a ratchet."""
+        probe = CalibrationProbe(
+            kernel="matmul_f32_1024_x5_v1", elapsed_ms=40.0,
+            baseline_ms=8.0, ratio_to_baseline=5.0,
+        )
+        report = evaluate_gate(_state(), calibration_probe=probe)
+        assert not report.passed
+        assert report.passed_ignoring_probe
+
+    def test_a_categorical_failure_does_not_count_as_healthy(self) -> None:
+        """A throttled or battery-powered host must not seed the baseline."""
+        probe = CalibrationProbe(
+            kernel="matmul_f32_1024_x5_v1", elapsed_ms=8.2,
+            baseline_ms=8.0, ratio_to_baseline=1.02,
+        )
+        report = evaluate_gate(
+            _state(thermal_state=ThermalState.SERIOUS), calibration_probe=probe
+        )
+        assert not report.passed_ignoring_probe
 
 
 def _hold_lock(state_dir: str, device_json: str, ready, release) -> None:

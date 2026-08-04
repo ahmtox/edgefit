@@ -34,7 +34,7 @@ import numpy as np
 
 from edgefit.schema.common import PowerSource, ThermalState
 from edgefit.schema.host import DeviceFingerprint, HostState
-from edgefit.schema.measurement import CalibrationProbe
+from edgefit.schema.measurement import CalibrationProbe, _percentile
 
 STATE_DIR = Path(os.environ.get("EDGEFIT_STATE_DIR", ".edgefit"))
 
@@ -44,6 +44,9 @@ CALIBRATION_KERNEL = "matmul_f32_1024_x5_v1"
 _MATRIX_DIM = 1024
 _MATMULS_PER_ROUND = 5
 _PROBE_ROUNDS = 3
+
+# Name of the probe check, so other code can reason about it without matching strings.
+_PROBE_CHECK = "calibration probe"
 
 
 class DeviceBusyError(Exception):
@@ -106,6 +109,22 @@ class GateReport:
         return tuple(check for check in self.checks if not check.passed and not check.advisory)
 
     @property
+    def passed_ignoring_probe(self) -> bool:
+        """True when every gating check except the calibration probe passed.
+
+        The categorical checks (AC power, low-power mode, thermal state, memory)
+        cannot be gamed by the baseline, so a probe sample taken under these
+        conditions is a legitimate observation of healthy throughput even if the
+        ratio check itself failed. That is what lets the baseline self-correct
+        instead of ratcheting.
+        """
+        return all(
+            check.passed
+            for check in self.checks
+            if not check.advisory and check.name != _PROBE_CHECK
+        )
+
+    @property
     def advisories(self) -> tuple[GateCheck, ...]:
         return tuple(check for check in self.checks if check.advisory and not check.passed)
 
@@ -153,10 +172,28 @@ def run_calibration_probe(baseline_ms: float | None = None) -> CalibrationProbe:
 class BaselineStore:
     """Per-unit calibration baselines, on disk.
 
-    Keyed on the physical unit rather than the SKU: two Mac minis of one model
-    do not necessarily deliver the same sustained clocks, and pretending they do
-    is how a fleet quietly develops a systematic bias.
+    Keyed on the physical unit rather than the SKU: two Mac minis of one model do
+    not necessarily deliver the same sustained clocks, and pretending they do is
+    how a fleet quietly develops a systematic bias.
+
+    The baseline is a **low percentile of recent healthy samples**, not the fastest
+    time ever seen. An all-time minimum is a ratchet: one unusually quiet moment
+    records 7.6 ms, the machine's normal healthy throughput is 8.4 ms, and from
+    then on nothing passes a 1.15x threshold. Observed exactly that way — a sweep
+    lost 16 of 45 cells to a baseline it could no longer reach.
+
+    A low percentile over a window keeps the original protection (a few slow
+    samples cannot soften the gate much) without the ratchet, and samples are only
+    recorded when the categorical checks pass, so a genuinely throttled host
+    cannot quietly relax its own threshold.
     """
+
+    #: Enough history to make a percentile meaningful without tracking a whole day.
+    WINDOW = 32
+    #: Below this, fall back to the minimum. Conservative, and self-corrects as
+    #: samples accumulate, because samples are recorded even when the ratio fails.
+    MIN_SAMPLES_FOR_PERCENTILE = 5
+    PERCENTILE = 0.10
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or (STATE_DIR / "baselines.json")
@@ -164,30 +201,53 @@ class BaselineStore:
     def _key(self, device: DeviceFingerprint) -> str:
         return f"{device.sku_id}:{device.unit_serial_hash or 'unknown'}:{CALIBRATION_KERNEL}"
 
-    def _load(self) -> dict[str, float]:
+    def _load(self) -> dict[str, list[float]]:
         if not self.path.exists():
             return {}
         try:
-            return json.loads(self.path.read_text())
+            raw = json.loads(self.path.read_text())
         except (OSError, json.JSONDecodeError):
             return {}
+        # Migrate the original scalar format by treating it as a single sample.
+        migrated: dict[str, list[float]] = {}
+        for key, value in raw.items():
+            if isinstance(value, int | float):
+                migrated[key] = [float(value)]
+            elif isinstance(value, dict) and isinstance(value.get("samples"), list):
+                migrated[key] = [float(v) for v in value["samples"]]
+            elif isinstance(value, list):
+                migrated[key] = [float(v) for v in value]
+        return migrated
+
+    def _write(self, data: dict[str, list[float]]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {key: {"samples": samples} for key, samples in data.items()}
+        self.path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+
+    def samples(self, device: DeviceFingerprint) -> list[float]:
+        return self._load().get(self._key(device), [])
 
     def get(self, device: DeviceFingerprint) -> float | None:
-        return self._load().get(self._key(device))
+        """Healthy-throughput estimate for this unit, or None if never measured."""
+        samples = self.samples(device)
+        if not samples:
+            return None
+        if len(samples) < self.MIN_SAMPLES_FOR_PERCENTILE:
+            return min(samples)
+        return _percentile(sorted(samples), self.PERCENTILE)
 
     def record(self, device: DeviceFingerprint, elapsed_ms: float) -> float:
-        """Store the fastest time ever seen for this unit.
+        """Add a sample and return the resulting baseline.
 
-        Monotonically improving: a baseline captured while the machine happened
-        to be busy would permanently make the gate too lenient.
+        Only call this when the categorical checks passed — see
+        ``GateReport.passed_ignoring_probe``.
         """
         data = self._load()
         key = self._key(device)
-        best = min(elapsed_ms, data.get(key, elapsed_ms))
-        data[key] = best
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(data, indent=2, sort_keys=True))
-        return best
+        samples = [*data.get(key, []), float(elapsed_ms)][-self.WINDOW :]
+        data[key] = samples
+        self._write(data)
+        return self.get(device) or float(elapsed_ms)
 
 
 # --------------------------------------------------------------------------
@@ -256,8 +316,11 @@ def wait_until_fit(
     while True:
         probe = run_calibration_probe(baselines.get(device))
         report = evaluate_gate(probe_state(), thresholds, probe)
-        if report.passed:
+        if report.passed_ignoring_probe:
+            # A legitimate observation of healthy throughput even if the ratio
+            # check failed — this is what lets the baseline self-correct.
             baselines.record(device, probe.elapsed_ms)
+        if report.passed:
             return report
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -367,7 +430,7 @@ def evaluate_gate(
     if calibration_probe is not None and calibration_probe.ratio_to_baseline is not None:
         checks.append(
             GateCheck(
-                name="calibration probe",
+                name=_PROBE_CHECK,
                 passed=calibration_probe.ratio_to_baseline <= limits.max_calibration_ratio,
                 observed=f"{calibration_probe.ratio_to_baseline:.2f}x baseline "
                 f"({calibration_probe.elapsed_ms:.1f} ms)",

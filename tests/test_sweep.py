@@ -56,7 +56,7 @@ def stubbed(monkeypatch, device, host_state):
     monkeypatch.setattr(sweep_module, "probe_device", lambda: device)
     monkeypatch.setattr(sweep_module, "wait_until_fit", lambda *a, **k: gate)
 
-    def fake_measure(artifact_dir, recipe, *, store, policy, thresholds):
+    def fake_measure(artifact_dir, recipe, *, store, policy, thresholds, gate=None):
         calls.append(recipe.label or "?")
         record = MeasurementRecord(
             harness_version=HARNESS_VERSION,
