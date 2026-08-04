@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# EdgeFit local state
+# The corpus is real measured data — it is NOT committed from a dev machine.
+# Publishable snapshots are produced by `edgefit corpus export`.
+#
+# Anchored with a leading slash. Without it, `corpus/` also matches
+# src/edgefit/corpus/ and silently excludes the source package.
+/corpus/
+/artifacts/
+/.edgefit/
+
+# OS
+.DS_Store
