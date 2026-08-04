@@ -374,6 +374,32 @@ def sweep(
         raise typer.Exit(code=1)
 
 
+atlas_app = typer.Typer(help="Build the public benchmark atlas.", no_args_is_help=True)
+app.add_typer(atlas_app, name="atlas")
+
+
+@atlas_app.command("build")
+def atlas_build(
+    out: Annotated[Path, typer.Option(help="Output directory.")] = Path("site"),
+    corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
+) -> None:
+    """Render the atlas from the corpus into a directory of static files."""
+    from edgefit.atlas import build as build_atlas  # noqa: PLC0415
+
+    with CorpusStore(corpus) as store, console.status("rendering…"):
+        report = build_atlas(store, out)
+
+    summary = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    summary.add_row("pages", str(report.pages))
+    summary.add_row("measurements", str(report.rows))
+    summary.add_row("models", str(report.models))
+    summary.add_row("devices", str(report.devices))
+    summary.add_row("size", f"{report.kib:.0f} KiB")
+    summary.add_row("output", str(report.directory / "index.html"))
+    console.print(summary)
+    console.print(f"\n{_OK}  open with [bold]open {report.directory / 'index.html'}[/bold]")
+
+
 @corpus_app.command("list")
 def corpus_list(
     corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,

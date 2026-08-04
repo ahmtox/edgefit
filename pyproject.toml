@@ -69,3 +69,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Verbatim CSS and JS in string literals. Reflowing them to fit a Python line
+# limit makes the stylesheet harder to read, not easier.
+"src/edgefit/atlas/assets.py" = ["E501"]
