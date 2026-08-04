@@ -1,0 +1,6 @@
+# Per-channel int8. Usually holds numerics better than per-tensor at the same
+# size, which is exactly the tradeoff the corpus should be able to show.
+extends: ort_cpu_int8_dynamic.yaml
+label: ort-cpu-int8-perchan
+quantization:
+  weight_granularity: per_channel

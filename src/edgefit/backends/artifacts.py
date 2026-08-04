@@ -1,0 +1,107 @@
+"""Resolve the artifact a recipe describes.
+
+The invariant this module exists to hold: **a recipe fully determines its
+artifact.** The recipe names the model, the opset, whether shapes are static, and
+the quantization scheme, so ``recipe_id -> artifact`` is a function. That is what
+lets the sweep runner cache aggressively and resume after the laptop lid closes,
+and it is why ``LoweringConfig`` lives on the recipe rather than being a CLI flag.
+
+Artifacts are content-addressed and derived lazily:
+
+    fp32 base export  ->  quantized variant  ->  measured
+    (torch, once)         (ORT, seconds)         (per recipe)
+
+torch is only imported on a base-export cache miss, so replaying an existing
+artifact stays inside the thin runtime dependency set (PROJECT.md §8, Tier 3).
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from edgefit.backends.export_onnx import (
+    DEFAULT_ARTIFACT_ROOT,
+    ExportedArtifact,
+    artifact_key,
+    export_onnx,
+)
+from edgefit.backends.quantize import (
+    UnsupportedQuantizationError,
+    copy_harness_inputs,
+    quantize_artifact,
+    variant_key,
+)
+from edgefit.models.registry import ModelSpec
+from edgefit.schema.recipe import Recipe
+
+__all__ = ["UnsupportedQuantizationError", "resolve_artifact"]
+
+
+def resolve_artifact(
+    spec: ModelSpec,
+    recipe: Recipe,
+    artifact_root: Path | str = DEFAULT_ARTIFACT_ROOT,
+    force: bool = False,
+) -> ExportedArtifact:
+    """Produce (or reuse) the artifact this recipe describes.
+
+    Raises ``UnsupportedQuantizationError`` when the recipe asks for a scheme this
+    backend cannot express — the caller records that as a ``lowering_failure``
+    rather than measuring the wrong model under the right label.
+    """
+    root = Path(artifact_root)
+    base = export_onnx(
+        spec,
+        artifact_root=root,
+        opset=recipe.lowering.opset,
+        static_shapes=recipe.lowering.static_shapes,
+        force=force,
+    )
+    if recipe.quantization is None:
+        return base
+
+    base_key = artifact_key(spec, recipe.lowering.opset, recipe.lowering.static_shapes)
+    key = variant_key(base_key, recipe.quantization)
+    directory = root / f"{spec.slug}__q{key}"
+    model_path = directory / "model.onnx"
+    meta_path = directory / "meta.json"
+
+    if not force and model_path.exists() and meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        return ExportedArtifact(
+            directory=directory,
+            model_path=model_path,
+            inputs_path=directory / "inputs.npz",
+            reference_path=directory / "reference.npz",
+            # Lowering cost is the *whole* pipeline: base export plus quantization
+            # (hard rule #4 — users experience pipelines, not kernels).
+            lowering_ms=float(meta["lowering_ms"]),
+            was_cached=True,
+        )
+
+    quantize_ms = quantize_artifact(base.model_path, directory, recipe.quantization)
+    copy_harness_inputs(base.directory, directory)
+
+    total_ms = quantize_ms + (0.0 if base.was_cached else base.lowering_ms)
+    meta_path.write_text(
+        json.dumps(
+            {
+                "ref": spec.ref,
+                "base_key": base_key,
+                "variant_key": key,
+                "quantization": recipe.quantization.model_dump(mode="json"),
+                "quantize_ms": quantize_ms,
+                "lowering_ms": total_ms,
+            },
+            indent=2,
+        )
+    )
+    return ExportedArtifact(
+        directory=directory,
+        model_path=model_path,
+        inputs_path=directory / "inputs.npz",
+        reference_path=directory / "reference.npz",
+        lowering_ms=total_ms,
+        was_cached=False,
+    )

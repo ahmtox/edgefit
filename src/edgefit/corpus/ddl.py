@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS measurements (
     lowering_ms           DOUBLE,
     accuracy              DOUBLE,
     accuracy_delta_vs_fp16 DOUBLE,
+    output_cosine_vs_reference DOUBLE,
     power_mw              DOUBLE,
 
     fallback_node_pct     DOUBLE,

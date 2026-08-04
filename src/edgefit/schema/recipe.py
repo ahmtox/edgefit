@@ -31,7 +31,8 @@ from edgefit.schema.common import (
 
 # Bump on any change to the meaning or shape of these fields. Records are never
 # edited in place; a schema change requires a migration (PROJECT.md §6.1).
-RECIPE_SCHEMA_VERSION = 1
+# v2 adds the `lowering` section, so a recipe fully determines its artifact.
+RECIPE_SCHEMA_VERSION = 2
 
 
 class _Frozen(BaseModel):
@@ -100,6 +101,26 @@ class PartitionConfig(_Frozen):
     )
     excluded_op_types: tuple[str, ...] = ()
     attention_boundary_split: bool = False
+
+
+class LoweringConfig(_Frozen):
+    """How the model is exported, before any runtime sees it.
+
+    Separate from ``ExecutionConfig`` because lowering and execution are genuinely
+    different stages (PROJECT.md §2.1 steps 2 and 6), and because putting these
+    here is what makes a recipe *fully determine* its artifact — the invariant the
+    sweep runner relies on to cache and resume.
+    """
+
+    opset: int = Field(default=17, gt=0)
+    static_shapes: bool = Field(
+        default=True,
+        description=(
+            "False marks batch and sequence dynamic. Not a convenience knob: dynamic "
+            "shape is the single biggest reason a delegate declines a subgraph, so the "
+            "two variants are a controlled experiment in silent fallback."
+        ),
+    )
 
 
 class ExecutionConfig(_Frozen):
@@ -199,6 +220,7 @@ class Recipe(_Frozen):
     schema_version: int = RECIPE_SCHEMA_VERSION
     model: ModelRef
     runtime: RuntimeConfig
+    lowering: LoweringConfig = LoweringConfig()
     quantization: QuantizationConfig | None = None
     calibration: CalibrationConfig | None = None
     partition: PartitionConfig = PartitionConfig()

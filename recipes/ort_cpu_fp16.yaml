@@ -1,0 +1,6 @@
+# fp16 on CPU, as the control for ort_coreml_fp16: CPU fp16 usually costs
+# conversion casts, so the pair isolates what the accelerator actually buys.
+extends: ort_cpu_fp32.yaml
+label: ort-cpu-fp16
+quantization:
+  weight_dtype: fp16

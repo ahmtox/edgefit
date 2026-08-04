@@ -64,6 +64,9 @@ def artifact_key(spec: ModelSpec, opset: int, static_shapes: bool) -> str:
         {
             "hf_id": spec.hf_id,
             "exporter": spec.exporter,
+            "hf_class": spec.hf_class,
+            "output_attr": spec.output_attr,
+            "submodule": spec.submodule,
             "opset": opset,
             "static_shapes": static_shapes,
             "shape": spec.static_shape,
@@ -71,18 +74,38 @@ def artifact_key(spec: ModelSpec, opset: int, static_shapes: bool) -> str:
     )
 
 
-def _build_encoder(spec: ModelSpec):
-    """Text encoder: wrap in an explicit positional-arg module.
+def _load_hf_model(spec: ModelSpec):
+    """Instantiate the model class the spec names, optionally a submodule of it."""
+    import transformers  # noqa: PLC0415
+
+    try:
+        cls = getattr(transformers, spec.hf_class)
+    except AttributeError as exc:
+        raise ValueError(f"transformers has no class {spec.hf_class!r} for {spec.ref}") from exc
+
+    model = cls.from_pretrained(spec.hf_id).eval()
+    if spec.submodule is not None:
+        model = getattr(model, spec.submodule)
+    return model.eval()
+
+
+def _build_text(spec: ModelSpec):
+    """Text model fed a fixed prompt padded to the static sequence length.
 
     transformers>=5 rejects the dict-of-kwargs form the TorchScript tracer emits
-    ("got multiple values for argument 'use_cache'"), so the wrapper is load
-    bearing, not cosmetic. It also pins the input names in the exported graph.
+    ("got multiple values for argument 'use_cache'"), so the positional wrapper is
+    load bearing, not cosmetic. It also pins the input names in the exported graph.
+
+    Input names come from what the tokenizer actually returns, because that varies
+    by architecture — DistilBERT has no ``token_type_ids`` and BERT does, and
+    exporting an input the model never receives produces a graph that fails at
+    session creation rather than at export.
     """
-    import torch
-    from transformers import AutoModel, AutoTokenizer
+    import torch  # noqa: PLC0415
+    from transformers import AutoTokenizer  # noqa: PLC0415
 
     tokenizer = AutoTokenizer.from_pretrained(spec.hf_id)
-    model = AutoModel.from_pretrained(spec.hf_id).eval()
+    model = _load_hf_model(spec)
     encoded = tokenizer(
         _CALIBRATION_TEXT,
         return_tensors="pt",
@@ -90,32 +113,34 @@ def _build_encoder(spec: ModelSpec):
         max_length=spec.static_shape["sequence"],
         truncation=True,
     )
-    names = [name for name in ("input_ids", "attention_mask", "token_type_ids") if name in encoded]
+    names = [
+        name for name in ("input_ids", "attention_mask", "token_type_ids") if name in encoded
+    ]
     args = tuple(encoded[name] for name in names)
+    output_attr = spec.output_attr
 
-    class EncoderWrapper(torch.nn.Module):
+    class TextWrapper(torch.nn.Module):
         def __init__(self, inner) -> None:
             super().__init__()
             self.inner = inner
 
         def forward(self, *tensors):
             outputs = self.inner(**dict(zip(names, tensors, strict=True)))
-            return outputs.last_hidden_state
+            return getattr(outputs, output_attr)
 
-    return EncoderWrapper(model).eval(), names, args, ["last_hidden_state"]
+    return TextWrapper(model).eval(), names, args, [output_attr]
 
 
 def _build_vision(spec: ModelSpec):
-    """Vision encoder fed a deterministic synthetic image.
+    """Vision model fed a deterministic synthetic image.
 
-    A fixed pseudo-random image rather than a real photograph: the numbers must
-    be reproducible by anyone without shipping image assets, and a vision
+    A fixed pseudo-random image rather than a photograph: the numbers must be
+    reproducible by anyone without shipping image assets, and a vision
     transformer's latency does not depend on image content.
     """
-    import torch
-    from transformers import AutoModel
+    import torch  # noqa: PLC0415
 
-    model = AutoModel.from_pretrained(spec.hf_id).eval()
+    model = _load_hf_model(spec)
     generator = torch.Generator().manual_seed(0)
     pixel_values = torch.rand(
         (
@@ -126,6 +151,7 @@ def _build_vision(spec: ModelSpec):
         ),
         generator=generator,
     )
+    output_attr = spec.output_attr
 
     class VisionWrapper(torch.nn.Module):
         def __init__(self, inner) -> None:
@@ -133,12 +159,12 @@ def _build_vision(spec: ModelSpec):
             self.inner = inner
 
         def forward(self, pixel_values):
-            return self.inner(pixel_values=pixel_values).last_hidden_state
+            return getattr(self.inner(pixel_values=pixel_values), output_attr)
 
-    return VisionWrapper(model).eval(), ["pixel_values"], (pixel_values,), ["last_hidden_state"]
+    return VisionWrapper(model).eval(), ["pixel_values"], (pixel_values,), [output_attr]
 
 
-_BUILDERS = {"encoder": _build_encoder, "vision": _build_vision}
+_BUILDERS = {"text": _build_text, "vision": _build_vision}
 
 
 def export_onnx(

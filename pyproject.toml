@@ -15,6 +15,9 @@ dependencies = [
     "pyarrow>=16",
     "onnx>=1.16",
     "onnxruntime>=1.19",
+    # fp16 graph conversion. Tiny, pure Python, and fp16 is a first-class
+    # on-device dtype — the Apple Neural Engine is fp16-native.
+    "onnxconverter-common>=1.14",
     "numpy>=1.26,<3",
     "psutil>=5.9",
     "pyyaml>=6",

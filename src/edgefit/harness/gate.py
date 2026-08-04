@@ -25,7 +25,7 @@ import fcntl
 import json
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -229,6 +229,42 @@ def device_lock(device: DeviceFingerprint, timeout_s: float = 0.0) -> Iterator[N
 # --------------------------------------------------------------------------
 # The gate
 # --------------------------------------------------------------------------
+
+
+def wait_until_fit(
+    thresholds: GateThresholds | None = None,
+    *,
+    device: DeviceFingerprint | None = None,
+    timeout_s: float = 600.0,
+    poll_s: float = 20.0,
+    on_wait: Callable[[GateReport, float], None] | None = None,
+) -> GateReport:
+    """Poll until the host is fit, or give up after ``timeout_s``.
+
+    PROJECT.md §5.6 specifies the thermal gate as "idle until temp below
+    threshold" — waiting, not refusing. A single measurement is right to refuse
+    immediately, but a sweep that refuses is a sweep that writes fifty
+    ``gate_refused`` rows and measures nothing. Waiting is what lets a laptop
+    produce a usable corpus overnight.
+    """
+    from edgefit.harness.hostinfo import probe_device, probe_state  # noqa: PLC0415
+
+    device = device or probe_device()
+    baselines = BaselineStore()
+    deadline = time.monotonic() + timeout_s
+
+    while True:
+        probe = run_calibration_probe(baselines.get(device))
+        report = evaluate_gate(probe_state(), thresholds, probe)
+        if report.passed:
+            baselines.record(device, probe.elapsed_ms)
+            return report
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return report
+        if on_wait is not None:
+            on_wait(report, remaining)
+        time.sleep(min(poll_s, remaining))
 
 
 def _format_bytes(value: int | None) -> str:

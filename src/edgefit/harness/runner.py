@@ -65,7 +65,8 @@ def _unavailable_on_this_host() -> dict[str, str]:
     return {
         "power_mw": "no power instrumentation on this host (needs Phase-2 hardware)",
         "sustained_tok_s_5min": "generative harness not implemented yet",
-        "accuracy": "tier-3 accuracy evaluation not implemented yet",
+        "accuracy": "tier-3 eval-set accuracy not implemented yet "
+        "(output_cosine_vs_reference is a numerics check, not task accuracy)",
     }
 
 
@@ -85,6 +86,31 @@ def _describe_exit(completed: subprocess.CompletedProcess[str]) -> str:
             f"not a Python exception.{f' Last output: {detail}' if detail else ''}"
         )
     return completed.stderr.strip()[-500:] or f"exit code {completed.returncode}, no output"
+
+
+def _output_cosine(outputs: dict[str, list[float]] | None, reference_path: Path) -> float | None:
+    """Cosine similarity of the measured output against the fp32 reference.
+
+    Deliberately cheap and deliberately *not* called accuracy. It catches a
+    quantization scheme that destroyed the model, which is the failure a latency
+    table alone would present as a win. It does not catch a scheme that degrades
+    one task slice while holding global similarity — that needs tier 3.
+    """
+    if not outputs or not reference_path.exists():
+        return None
+    try:
+        import numpy as np  # noqa: PLC0415
+
+        with np.load(reference_path) as data:
+            reference = next(iter(data.values())).ravel()
+        measured = np.asarray(next(iter(outputs.values())), dtype=np.float64)
+        reference = reference[: measured.size].astype(np.float64)
+        if measured.size == 0 or not measured.any() or not reference.any():
+            return None
+        denominator = float(np.linalg.norm(measured) * np.linalg.norm(reference))
+        return float(np.dot(measured, reference) / denominator) if denominator else None
+    except Exception:  # noqa: BLE001 - a missing comparison is a null, not a failed run
+        return None
 
 
 def _run_worker(job: dict, timeout_s: float = _WORKER_TIMEOUT_S) -> dict:
@@ -292,6 +318,9 @@ def measure(
                 peak_rss_bytes=run.peak_rss_bytes,
                 artifact_bytes=analysis.artifact_bytes,
                 lowering_ms=analysis.lowering_ms,
+                output_cosine_vs_reference=_output_cosine(
+                    run.outputs, artifact_dir / "reference.npz"
+                ),
                 unavailable=_unavailable_on_this_host(),
             ),
             fallback=analysis.fallback,

@@ -168,7 +168,7 @@ class CorpusStore:
                 $latency_p50_ms, $latency_p95_ms, $latency_cv,
                 $ttft_p50_ms, $decode_tok_s_p50, $sustained_tok_s_5min,
                 $peak_rss_bytes, $artifact_bytes, $lowering_ms,
-                $accuracy, $accuracy_delta_vs_fp16, $power_mw,
+                $accuracy, $accuracy_delta_vs_fp16, $output_cosine_vs_reference, $power_mw,
                 $fallback_node_pct, $fallback_flops_pct, $fallback_time_pct,
                 $power_source, $low_power_mode, $thermal_state, $load_avg_1m,
                 $calibration_ratio, $payload
@@ -205,6 +205,9 @@ class CorpusStore:
                 "lowering_ms": metrics.lowering_ms if metrics else None,
                 "accuracy": metrics.accuracy if metrics else None,
                 "accuracy_delta_vs_fp16": metrics.accuracy_delta_vs_fp16 if metrics else None,
+                "output_cosine_vs_reference": (
+                    metrics.output_cosine_vs_reference if metrics else None
+                ),
                 "power_mw": metrics.power_mw if metrics else None,
                 "fallback_node_pct": fallback.fallback_node_pct if fallback else None,
                 "fallback_flops_pct": fallback.fallback_flops_pct if fallback else None,
@@ -246,6 +249,38 @@ class CorpusStore:
             "SELECT payload FROM recipes WHERE recipe_id = $id", {"id": recipe_id}
         ).fetchone()
         return Recipe.model_validate_json(row[0]) if row else None
+
+    def has_measurement(
+        self,
+        recipe_id: str,
+        device_id: str,
+        harness_version: str,
+        *,
+        stress_profile: str = "clean",
+    ) -> bool:
+        """Has this cell already been measured under these exact conditions?
+
+        Powers sweep resumption. ``gate_refused`` rows deliberately do not count:
+        they record that we *could not* measure, so the cell is still outstanding.
+        """
+        row = self._conn.execute(
+            """
+            SELECT 1 FROM measurements
+            WHERE recipe_id = $recipe_id
+              AND device_id = $device_id
+              AND harness_version = $harness_version
+              AND stress_profile = $stress_profile
+              AND outcome != 'gate_refused'
+            LIMIT 1
+            """,
+            {
+                "recipe_id": recipe_id,
+                "device_id": device_id,
+                "harness_version": harness_version,
+                "stress_profile": stress_profile,
+            },
+        ).fetchone()
+        return row is not None
 
     def count(self, table: str = "measurements") -> int:
         if table not in {"measurements", "recipes", "graph_fingerprints"}:

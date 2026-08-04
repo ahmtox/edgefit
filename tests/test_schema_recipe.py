@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from edgefit.cli.recipes import available_recipes, load_recipe
 from edgefit.schema import (
+    RECIPE_SCHEMA_VERSION,
     ActivationQuant,
     CalibrationConfig,
     CoreMLComputeUnits,
@@ -73,7 +74,7 @@ class TestConfigId:
 
     def test_changes_with_schema_version(self, cpu_recipe: Recipe) -> None:
         """A migration must produce new ids rather than silently reusing old ones."""
-        bumped = cpu_recipe.model_copy(update={"schema_version": 2})
+        bumped = cpu_recipe.model_copy(update={"schema_version": RECIPE_SCHEMA_VERSION + 1})
         assert bumped.recipe_id != cpu_recipe.recipe_id
 
 
@@ -253,3 +254,18 @@ class TestRecipeLibrary:
             recipe = load_recipe(path, MINILM)
             assert recipe.label, f"{path} has no label"
             assert recipe.runtime.providers
+
+
+class TestLowering:
+    """A recipe must fully determine its artifact (the sweep's caching invariant)."""
+
+    def test_lowering_participates_in_the_id(self, cpu_recipe: Recipe) -> None:
+        dynamic = cpu_recipe.derive(lowering={"static_shapes": False})
+        assert dynamic.recipe_id != cpu_recipe.recipe_id
+
+    def test_opset_participates_in_the_id(self, cpu_recipe: Recipe) -> None:
+        assert cpu_recipe.derive(lowering={"opset": 18}).recipe_id != cpu_recipe.recipe_id
+
+    def test_defaults_to_static_shapes(self, cpu_recipe: Recipe) -> None:
+        """Dynamic shape is the biggest reason a delegate declines a subgraph."""
+        assert cpu_recipe.lowering.static_shapes is True

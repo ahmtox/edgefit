@@ -164,7 +164,6 @@ def measure(
     recipe: Annotated[Path, typer.Option(help="Path to a recipe YAML.")],
     runs: Annotated[int, typer.Option(help="Timed runs. Minimum 5 (PROJECT.md §14.2).")] = 10,
     warmup: Annotated[int, typer.Option(help="Discarded warmup runs.")] = 3,
-    dynamic: Annotated[bool, typer.Option(help="Use the dynamic-shape artifact.")] = False,
     corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
     force_unfit: Annotated[
         bool, typer.Option("--force-unfit", help="Measure anyway on an unfit host. The row is "
@@ -172,13 +171,20 @@ def measure(
     ] = False,
 ) -> None:
     """Measure one (model, recipe) pair on this device and record the result."""
-    from edgefit.backends.export_onnx import export_onnx  # noqa: PLC0415
+    from edgefit.backends.artifacts import (  # noqa: PLC0415
+        UnsupportedQuantizationError,
+        resolve_artifact,
+    )
 
     spec = resolve(model)
     record_recipe = load_recipe(recipe, model)
 
-    with console.status("resolving artifact…"):
-        artifact = export_onnx(spec, static_shapes=not dynamic)
+    try:
+        with console.status("resolving artifact…"):
+            artifact = resolve_artifact(spec, record_recipe)
+    except UnsupportedQuantizationError as exc:
+        console.print(f"artifact           {_FAIL} [red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
     console.print(
         f"artifact           {_OK} [dim]{artifact.size_bytes / 1024**2:.1f} MiB · "
         f"{'cached' if artifact.was_cached else f'{artifact.lowering_ms:.0f} ms'}[/dim]"
@@ -242,6 +248,10 @@ def measure(
     )
     console.print(f"  peak_rss         {_mib(metrics.peak_rss_bytes)}")
     console.print(f"  artifact         {_mib(metrics.artifact_bytes)}")
+    if metrics.output_cosine_vs_reference is not None:
+        cosine = metrics.output_cosine_vs_reference
+        warn = "  [yellow](numerics degraded)[/yellow]" if cosine < 0.999 else ""
+        console.print(f"  numerics         cosine {cosine:.5f} vs fp32 reference{warn}")
     if record.notes:
         console.print(f"\n[yellow]⚠ {record.notes}[/yellow]")
 
@@ -272,6 +282,89 @@ def _print_fallback(fallback) -> None:
         )
 
 
+@app.command()
+def sweep(
+    model: Annotated[
+        list[str] | None,
+        typer.Option(help="Model refs. Repeatable. Omit for the whole registry."),
+    ] = None,
+    recipe: Annotated[
+        list[Path] | None,
+        typer.Option(help="Recipe YAMLs. Repeatable. Omit for the whole library."),
+    ] = None,
+    runs: Annotated[int, typer.Option(help="Timed runs per cell. Minimum 5.")] = 10,
+    warmup: Annotated[int, typer.Option(help="Discarded warmup runs.")] = 3,
+    corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
+    resume: Annotated[
+        bool, typer.Option(help="Skip cells already measured on this device and harness version.")
+    ] = True,
+    wait: Annotated[
+        float, typer.Option(help="Seconds to wait for a fit host before giving up.")
+    ] = 600.0,
+) -> None:
+    """Measure the cross product of models and recipes.
+
+    Waits for a fit host rather than refusing, resumes where it left off, and
+    records every outcome including failures.
+    """
+    from edgefit.harness.sweep import expand, run_sweep  # noqa: PLC0415
+
+    model_refs = model or known_refs()
+    recipe_paths = recipe or available_recipes()
+    cells = expand(model_refs, recipe_paths)
+
+    console.print(
+        f"[bold]{len(cells)} cells[/bold] — {len(model_refs)} models × "
+        f"{len(recipe_paths)} recipes · {runs} runs each"
+    )
+
+    marks = {
+        "measured": "[green]✓[/green]",
+        "resumed": "[dim]·[/dim]",
+        "failed": "[red]✗[/red]",
+        "refused": "[yellow]![/yellow]",
+        "waiting": "[yellow]⏸[/yellow]",
+        "aborted": "[red]■[/red]",
+    }
+    width = max((len(c.label) for c in cells), default=10)
+
+    def on_event(kind: str, cell, detail: str) -> None:
+        if kind == "resumed":
+            return  # already in the corpus; saying so for every cell is noise
+        console.print(f"  {marks.get(kind, ' ')} {cell.label:<{width}}  [dim]{detail}[/dim]")
+
+    with CorpusStore(corpus) as store:
+        report = run_sweep(
+            model_refs,
+            recipe_paths,
+            store=store,
+            policy=MeasurementPolicy(runs=runs, warmup=warmup),
+            resume=resume,
+            wait_for_fit_s=wait,
+            on_event=on_event,
+        )
+        total_rows = store.count("measurements")
+
+    summary = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    summary.add_row("measured", f"[green]{report.measured}[/green]")
+    if report.resumed:
+        summary.add_row("already done", f"[dim]{report.resumed}[/dim]")
+    if report.lowering_failures:
+        summary.add_row("lowering failures", f"[red]{report.lowering_failures}[/red]")
+    if report.runtime_failures:
+        summary.add_row("runtime failures", f"[red]{report.runtime_failures}[/red]")
+    if report.gate_refused:
+        summary.add_row("gate refused", f"[yellow]{report.gate_refused}[/yellow]")
+    summary.add_row("elapsed", f"{report.elapsed_s / 60:.1f} min")
+    summary.add_row("corpus", f"{total_rows} rows")
+    console.print()
+    console.print(summary)
+
+    if report.aborted_reason:
+        console.print(f"\n[red]sweep aborted[/red] — {report.aborted_reason}")
+        raise typer.Exit(code=1)
+
+
 @corpus_app.command("list")
 def corpus_list(
     corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
@@ -281,8 +374,9 @@ def corpus_list(
     with CorpusStore(corpus) as store:
         rows = store.query(
             """
-            SELECT m.created_at, m.model_ref, c.intended_provider, m.outcome,
-                   m.latency_p50_ms, m.latency_cv, m.fallback_flops_pct, m.peak_rss_bytes
+            SELECT m.created_at, m.model_ref, coalesce(c.label, c.intended_provider), m.outcome,
+                   m.latency_p50_ms, m.latency_cv, m.fallback_flops_pct,
+                   m.output_cosine_vs_reference
             FROM measurements m LEFT JOIN recipes c USING (recipe_id)
             ORDER BY m.created_at DESC LIMIT $limit
             """,
@@ -295,10 +389,10 @@ def corpus_list(
         return
 
     table = Table(title=f"Measurements ({total} total)", header_style="bold")
-    columns = ("when", "model", "provider", "outcome", "p50 ms", "cv", "fallback FLOPs", "peak")
+    columns = ("when", "model", "recipe", "outcome", "p50 ms", "cv", "fallback FLOPs", "cosine")
     for column in columns:
         table.add_column(column)
-    for created, model_ref, provider, outcome, p50, cv, flops_pct, rss in rows:
+    for created, model_ref, provider, outcome, p50, cv, flops_pct, cosine in rows:
         table.add_row(
             created.strftime("%m-%d %H:%M"),
             model_ref.removeprefix("hf:").split("/")[-1],
@@ -307,7 +401,7 @@ def corpus_list(
             f"{p50:.2f}" if p50 is not None else "—",
             f"{cv:.1%}" if cv is not None else "—",
             f"{flops_pct:.1f}%" if flops_pct is not None else "—",
-            _mib(rss),
+            f"{cosine:.4f}" if cosine is not None else "—",
         )
     console.print(table)
 

@@ -1,0 +1,6 @@
+# fp16 on CoreML. Not exotic on this hardware — the Apple Neural Engine is
+# fp16-native, so this is arguably the first thing a team should try.
+extends: ort_coreml_fp32.yaml
+label: ort-coreml-fp16
+quantization:
+  weight_dtype: fp16

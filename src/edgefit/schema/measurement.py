@@ -24,7 +24,8 @@ from edgefit.schema.common import Outcome, StressProfile, content_hash
 from edgefit.schema.host import DeviceFingerprint, HostState
 
 # v2 adds stress_profile (PROJECT.md §6.2, §9 step 2: "from day one").
-MEASUREMENT_SCHEMA_VERSION = 2
+# v3 adds output_cosine_vs_reference, so the quantization axis carries a cost column.
+MEASUREMENT_SCHEMA_VERSION = 3
 
 # PROJECT.md §14.2. Not a suggestion, and not configurable downwards.
 MIN_RUNS = 5
@@ -205,8 +206,20 @@ class Metrics(_Frozen):
     sustained_tok_s_5min: float | None = None
 
     # Accuracy
-    accuracy: float | None = None
+    accuracy: float | None = Field(
+        default=None, description="Task accuracy on an eval set. Tier 3; not implemented yet."
+    )
     accuracy_delta_vs_fp16: float | None = None
+    output_cosine_vs_reference: float | None = Field(
+        default=None,
+        description=(
+            "Cosine similarity of this run's output against the fp32 PyTorch reference "
+            "captured at export. Cheap numerics degradation, NOT task accuracy — a "
+            "quantized model can hold cosine 0.999 and still fail on the slice that "
+            "matters. Reported so the quantization axis has a cost column at all: "
+            "'int8 is 2x faster' with no cost is exactly the half-truth §2.2 warns about."
+        ),
+    )
 
     # Power — null on every laptop host; needs Phase-2 instrumentation.
     power_mw: float | None = None

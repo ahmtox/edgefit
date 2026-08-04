@@ -1,0 +1,9 @@
+# int8 dynamic weights, per-tensor. Needs no calibration data, which is what makes
+# it affordable to sweep — static activation quantization waits for that machinery.
+extends: ort_cpu_fp32.yaml
+label: ort-cpu-int8-dyn
+quantization:
+  weight_dtype: int8
+  weight_granularity: per_tensor
+  activation_quant: dynamic
+  activation_dtype: int8
