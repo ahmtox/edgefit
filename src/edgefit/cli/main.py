@@ -150,16 +150,27 @@ def doctor(
 def export(
     model: Annotated[str, typer.Option(help="Model ref, e.g. hf:google/vit-base-patch16-224")],
     dynamic: Annotated[
-        bool, typer.Option(help="Export with dynamic batch/sequence instead of static shapes.")
+        bool,
+        typer.Option(
+            help="Dynamic batch/sequence instead of static shapes. Forced on for "
+            "decoders, whose KV cache requires it."
+        ),
     ] = False,
     force: Annotated[bool, typer.Option(help="Re-export even if cached.")] = False,
 ) -> None:
     """Export a model to ONNX with pinned inputs and an fp32 reference output."""
-    from edgefit.backends.export_onnx import export_onnx  # noqa: PLC0415 - needs the export extra
+    # Needs the export extra. Dispatches on the spec's exporter, so a decoder gets
+    # the KV-cache export rather than the single-shot one.
+    from edgefit.backends.export_decoder import export_decoder  # noqa: PLC0415
+    from edgefit.backends.export_onnx import export_onnx  # noqa: PLC0415
 
     spec = resolve(model)
+    if spec.exporter == "decoder":
+        exporter, static = export_decoder, False
+    else:
+        exporter, static = export_onnx, not dynamic
     with console.status(f"exporting {spec.hf_id}…"):
-        artifact = export_onnx(spec, static_shapes=not dynamic, force=force)
+        artifact = exporter(spec, static_shapes=static, force=force)
     state = "cached" if artifact.was_cached else f"{artifact.lowering_ms:.0f} ms"
     console.print(
         f"{_OK}  {artifact.directory}  "
@@ -247,20 +258,42 @@ def measure(
         raise typer.Exit(code=1)
 
     metrics = record.metrics
-    assert metrics is not None and metrics.latency_ms is not None
-    stats = metrics.latency_ms
+    assert metrics is not None
+    stats = metrics.primary_stats
+    assert stats is not None
     console.print(f"runs               warmup {record.warmup_count} / timed {stats.n}")
     console.print()
-    console.print(
-        f"  latency_ms       p50 [bold]{stats.p50:.2f}[/bold]  p95 {stats.p95:.2f}  "
-        f"sd {stats.stddev:.3f}  cv {stats.cv:.1%}"
-    )
+
+    if metrics.ttft_ms is not None:
+        # Two phases, reported separately: prefill is compute-bound, decode is
+        # bandwidth-bound, and one averaged number would describe neither.
+        ttft = metrics.ttft_ms
+        console.print(
+            f"  ttft_ms          p50 [bold]{ttft.p50:.1f}[/bold]  p95 {ttft.p95:.1f}  "
+            f"cv {ttft.cv:.1%}   [dim](prefill)[/dim]"
+        )
+        if metrics.decode_tok_s is not None:
+            dec = metrics.decode_tok_s
+            console.print(
+                f"  decode_tok_s     p50 [bold]{dec.p50:.2f}[/bold]  p95 {dec.p95:.2f}  "
+                f"cv {dec.cv:.1%}   [dim](steady state)[/dim]"
+            )
+    else:
+        console.print(
+            f"  latency_ms       p50 [bold]{stats.p50:.2f}[/bold]  p95 {stats.p95:.2f}  "
+            f"sd {stats.stddev:.3f}  cv {stats.cv:.1%}"
+        )
+
     console.print(f"  peak_rss         {_mib(metrics.peak_rss_bytes)}")
     console.print(f"  artifact         {_mib(metrics.artifact_bytes)}")
     if metrics.output_cosine_vs_reference is not None:
         cosine = metrics.output_cosine_vs_reference
         warn = "  [yellow](numerics degraded)[/yellow]" if cosine < 0.999 else ""
         console.print(f"  numerics         cosine {cosine:.5f} vs fp32 reference{warn}")
+    if metrics.token_agreement is not None:
+        agree = metrics.token_agreement
+        mark = "[green]exact[/green]" if agree == 1.0 else f"[yellow]{agree:.0%}[/yellow]"
+        console.print(f"  tokens           {mark} match vs fp32 PyTorch greedy decode")
     if record.notes:
         console.print(f"\n[yellow]⚠ {record.notes}[/yellow]")
 
@@ -329,6 +362,7 @@ def sweep(
 
     marks = {
         "measured": "[green]✓[/green]",
+        "skipped": "[dim]∅[/dim]",
         "resumed": "[dim]·[/dim]",
         "failed": "[red]✗[/red]",
         "refused": "[yellow]![/yellow]",
@@ -358,6 +392,8 @@ def sweep(
     summary.add_row("measured", f"[green]{report.measured}[/green]")
     if report.resumed:
         summary.add_row("already done", f"[dim]{report.resumed}[/dim]")
+    if report.not_applicable:
+        summary.add_row("not applicable", f"[dim]{report.not_applicable}[/dim]")
     if report.lowering_failures:
         summary.add_row("lowering failures", f"[red]{report.lowering_failures}[/red]")
     if report.runtime_failures:

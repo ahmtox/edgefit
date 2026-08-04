@@ -30,6 +30,24 @@ from edgefit.schema.common import content_hash
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/onnx")
 DEFAULT_OPSET = 17
 
+#: Bump whenever this exporter would produce a different graph for the same inputs.
+#: It is part of the artifact key, because otherwise changing the export code
+#: silently reuses a stale cached artifact — and worse, two measurements of two
+#: different graphs end up sharing one identity in the corpus.
+EXPORTER_VERSION = 2
+
+#: Files the harness writes alongside the model; not part of the shipped artifact.
+HARNESS_SIDECARS = frozenset({"inputs.npz", "reference.npz", "meta.json"})
+
+
+def artifact_size_bytes(directory: Path) -> int:
+    """Bytes of the model artifact in ``directory``, excluding harness sidecars."""
+    return sum(
+        path.stat().st_size
+        for path in directory.iterdir()
+        if path.is_file() and path.name not in HARNESS_SIDECARS
+    )
+
 # One fixed prompt, so the exported reference is reproducible by anyone.
 _CALIBRATION_TEXT = "EdgeFit measures what actually runs on the device."
 
@@ -47,8 +65,15 @@ class ExportedArtifact:
 
     @property
     def size_bytes(self) -> int:
-        """Total on-disk size — external weight files count (hard rule #4)."""
-        return sum(p.stat().st_size for p in self.directory.glob("*.onnx*"))
+        """Total on-disk size of the model artifact.
+
+        Every file except our own harness sidecars. Globbing ``*.onnx*`` was wrong:
+        a model over the 2 GB protobuf limit spills its weights into external files
+        named after the tensors, so a 5.6 GB Llama artifact measured 0.7 MiB — the
+        graph without any of its weights. Hard rule #4 says measure what a user
+        actually ships, and they ship the whole directory.
+        """
+        return artifact_size_bytes(self.directory)
 
     def load_inputs(self) -> dict[str, np.ndarray]:
         with np.load(self.inputs_path) as data:
@@ -64,6 +89,7 @@ def artifact_key(spec: ModelSpec, opset: int, static_shapes: bool) -> str:
         {
             "hf_id": spec.hf_id,
             "exporter": spec.exporter,
+            "exporter_version": EXPORTER_VERSION,
             "hf_class": spec.hf_class,
             "output_attr": spec.output_attr,
             "submodule": spec.submodule,

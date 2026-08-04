@@ -80,6 +80,19 @@ REGISTRY: dict[str, ModelSpec] = {
         static_shape=_TEXT_SHAPE,
         description="BART encoder. Learned positional embeddings and a wider hidden size.",
     ),
+    "hf:meta-llama/Llama-3.2-1B-Instruct": ModelSpec(
+        ref="hf:meta-llama/Llama-3.2-1B-Instruct",
+        hf_id="meta-llama/Llama-3.2-1B-Instruct",
+        task=TaskType.GENERATE,
+        exporter="decoder",
+        hf_class="AutoModelForCausalLM",
+        static_shape={"batch": 1},
+        description=(
+            "1.2B decoder-only, GQA 32q/8kv, RMSNorm — the architecture PROJECT.md's "
+            "worked example describes. Exported with KV cache I/O so decode is O(1) "
+            "per token rather than O(n)."
+        ),
+    ),
     "hf:google/vit-base-patch16-224-in21k": ModelSpec(
         ref="hf:google/vit-base-patch16-224-in21k",
         hf_id="google/vit-base-patch16-224-in21k",

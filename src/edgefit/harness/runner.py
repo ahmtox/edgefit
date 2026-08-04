@@ -61,13 +61,29 @@ class MeasurementOutcome:
         return self.record.outcome is Outcome.SUCCESS
 
 
-def _unavailable_on_this_host() -> dict[str, str]:
-    return {
+def _unavailable_on_this_host(*, generative: bool = False) -> dict[str, str]:
+    reasons = {
         "power_mw": "no power instrumentation on this host (needs Phase-2 hardware)",
-        "sustained_tok_s_5min": "generative harness not implemented yet",
+        "sustained_tok_s_5min": (
+            "sustained throughput is a thermal-soak measurement and belongs to the "
+            "stress bench (PROJECT.md §5.6), which is not built yet"
+        ),
         "accuracy": "tier-3 eval-set accuracy not implemented yet "
-        "(output_cosine_vs_reference is a numerics check, not task accuracy)",
+        "(numerics checks are not task accuracy)",
     }
+    if generative:
+        reasons["latency_ms"] = (
+            "a generative recipe reports ttft_ms and decode_tok_s separately; a single "
+            "averaged latency would describe neither phase"
+        )
+        reasons["output_cosine_vs_reference"] = (
+            "generative recipes are compared by token agreement, not output cosine"
+        )
+    else:
+        reasons["ttft_ms"] = "not a generative task"
+        reasons["decode_tok_s"] = "not a generative task"
+        reasons["token_agreement"] = "not a generative task"
+    return reasons
 
 
 def _describe_exit(completed: subprocess.CompletedProcess[str]) -> str:
@@ -86,6 +102,31 @@ def _describe_exit(completed: subprocess.CompletedProcess[str]) -> str:
             f"not a Python exception.{f' Last output: {detail}' if detail else ''}"
         )
     return completed.stderr.strip()[-500:] or f"exit code {completed.returncode}, no output"
+
+
+def _token_agreement(tokens: list[int] | None, reference_path: Path) -> float | None:
+    """Fraction of greedily-decoded tokens matching the fp32 PyTorch reference.
+
+    Stricter than a float tolerance: the graph either decodes the same text or it
+    does not. Still a numerics check rather than a quality measure — identical greedy
+    tokens say nothing about behaviour under sampling or on a real prompt mix.
+    """
+    if not tokens or not reference_path.exists():
+        return None
+    try:
+        import numpy as np  # noqa: PLC0415
+
+        with np.load(reference_path) as data:
+            if "tokens" not in data:
+                return None
+            reference = [int(v) for v in data["tokens"]]
+    except Exception:  # noqa: BLE001 - a missing comparison is a null, not a failed run
+        return None
+    if not reference:
+        return None
+    compared = min(len(reference), len(tokens))
+    matches = sum(1 for a, b in zip(tokens[:compared], reference[:compared], strict=True) if a == b)
+    return matches / compared
 
 
 def _output_cosine(outputs: dict[str, list[float]] | None, reference_path: Path) -> float | None:
@@ -185,6 +226,7 @@ def _measure_in_subprocess(
             "recipe": recipe.model_dump(mode="json"),
             "runs": policy.runs,
             "warmup": policy.warmup,
+            "decode_tokens": policy.decode_tokens,
         }
     )
     return DeviceRun(
@@ -193,6 +235,9 @@ def _measure_in_subprocess(
         warmup_count=payload.get("warmup_count", 0),
         outputs=payload.get("outputs"),
         failure_reason=payload.get("failure_reason"),
+        ttft_samples_ms=payload.get("ttft_samples_ms") or [],
+        decode_samples_tok_s=payload.get("decode_samples_tok_s") or [],
+        generated_tokens=payload.get("generated_tokens"),
     )
 
 
@@ -305,7 +350,8 @@ def measure(
             warmup=run.warmup_count,
         )
     else:
-        stats = aggregate(run.samples_ms)
+        generative = run.is_generative
+        stats = aggregate(run.ttft_samples_ms if generative else run.samples_ms)
         notes = None
         if is_noisy(stats, policy):
             notes = (
@@ -326,14 +372,29 @@ def measure(
             run_count=stats.n,
             warmup_count=run.warmup_count,
             metrics=Metrics(
-                latency_ms=stats,
+                # TTFT is the primary distribution for a generative recipe; a single
+                # averaged "latency" would describe neither prefill nor decode.
+                latency_ms=None if generative else stats,
+                ttft_ms=stats if generative else None,
+                decode_tok_s=(
+                    aggregate(run.decode_samples_tok_s)
+                    if generative and run.decode_samples_tok_s
+                    else None
+                ),
                 peak_rss_bytes=run.peak_rss_bytes,
                 artifact_bytes=analysis.artifact_bytes,
                 lowering_ms=analysis.lowering_ms,
-                output_cosine_vs_reference=_output_cosine(
-                    run.outputs, artifact_dir / "reference.npz"
+                output_cosine_vs_reference=(
+                    None if generative else _output_cosine(
+                        run.outputs, artifact_dir / "reference.npz"
+                    )
                 ),
-                unavailable=_unavailable_on_this_host(),
+                token_agreement=(
+                    _token_agreement(run.generated_tokens, artifact_dir / "reference.npz")
+                    if generative
+                    else None
+                ),
+                unavailable=_unavailable_on_this_host(generative=generative),
             ),
             fallback=analysis.fallback,
             fallback_as_run=analysis.fallback_as_run,

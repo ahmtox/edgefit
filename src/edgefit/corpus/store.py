@@ -23,7 +23,7 @@ import duckdb
 from edgefit.corpus.ddl import DDL
 from edgefit.schema.common import canonical_json
 from edgefit.schema.fingerprint import GraphFingerprint
-from edgefit.schema.measurement import MeasurementRecord
+from edgefit.schema.measurement import MEASUREMENT_SCHEMA_VERSION, MeasurementRecord
 from edgefit.schema.recipe import Recipe
 
 DEFAULT_CORPUS_PATH = Path("corpus/measurements.duckdb")
@@ -34,6 +34,17 @@ DEFAULT_CORPUS_PATH = Path("corpus/measurements.duckdb")
 _READ_ONLY_STATEMENT = re.compile(
     r"^\s*(select|with|describe|explain|pragma|show)\b", re.IGNORECASE
 )
+
+
+class CorpusSchemaMismatch(Exception):
+    """The corpus file was written by a different schema version.
+
+    Raised on open rather than letting the first insert fail with DuckDB's
+    "table has 44 columns but 48 values were supplied", which tells an operator
+    nothing about what to do. Measurements are immutable (PROJECT.md §14.3), so the
+    resolution is a migration that rewrites rows into the new schema — or, for a
+    throwaway dev corpus, deleting the file.
+    """
 
 
 class DuplicateRecordError(Exception):
@@ -58,6 +69,32 @@ class CorpusStore:
             self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = duckdb.connect(str(self.path))
         self._conn.execute(DDL)
+        self._check_schema_version()
+
+    def _check_schema_version(self) -> None:
+        expected = str(MEASUREMENT_SCHEMA_VERSION)
+        row = self._conn.execute(
+            "SELECT value FROM corpus_meta WHERE key = 'measurement_schema_version'"
+        ).fetchone()
+        if row is None:
+            rows = self._conn.execute("SELECT count(*) FROM measurements").fetchone()
+            if rows and rows[0]:
+                raise CorpusSchemaMismatch(
+                    f"{self.path} holds {rows[0]} measurements but records no schema "
+                    f"version, so it predates version tracking. Current schema is v{expected}. "
+                    "Export what you need and rebuild, or write a migration."
+                )
+            self._conn.execute(
+                "INSERT INTO corpus_meta VALUES ('measurement_schema_version', $v)",
+                {"v": expected},
+            )
+            return
+        if row[0] != expected:
+            raise CorpusSchemaMismatch(
+                f"{self.path} was written with measurement schema v{row[0]}; this build "
+                f"expects v{expected}. Measurements are immutable, so migrate the rows "
+                "into the new schema or start a new corpus file."
+            )
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -170,7 +207,8 @@ class CorpusStore:
                 $latency_p50_ms, $latency_p95_ms, $latency_cv,
                 $ttft_p50_ms, $decode_tok_s_p50, $sustained_tok_s_5min,
                 $peak_rss_bytes, $artifact_bytes, $lowering_ms,
-                $accuracy, $accuracy_delta_vs_fp16, $output_cosine_vs_reference, $power_mw,
+                $accuracy, $accuracy_delta_vs_fp16, $output_cosine_vs_reference,
+                $token_agreement, $power_mw,
                 $fallback_node_pct, $fallback_flops_pct, $fallback_time_pct,
                 $as_run_node_pct, $as_run_time_pct, $as_run_partitions,
                 $power_source, $low_power_mode, $thermal_state, $load_avg_1m,
@@ -216,6 +254,7 @@ class CorpusStore:
                 "output_cosine_vs_reference": (
                     metrics.output_cosine_vs_reference if metrics else None
                 ),
+                "token_agreement": metrics.token_agreement if metrics else None,
                 "power_mw": metrics.power_mw if metrics else None,
                 "fallback_node_pct": fallback.fallback_node_pct if fallback else None,
                 "fallback_flops_pct": fallback.fallback_flops_pct if fallback else None,

@@ -59,6 +59,7 @@ class SweepReport:
     cells: int = 0
     measured: int = 0
     resumed: int = 0
+    not_applicable: int = 0
     lowering_failures: int = 0
     runtime_failures: int = 0
     gate_refused: int = 0
@@ -112,6 +113,25 @@ def _lowering_failure_record(
     )
 
 
+def _describe(record: MeasurementRecord) -> str:
+    """One line summarising what was measured.
+
+    Dispatches on which distribution arrived, because a generative recipe has no
+    single "latency" — it has TTFT and a decode rate.
+    """
+    metrics = record.metrics
+    if metrics is None:
+        return ""
+    if metrics.ttft_ms is not None:
+        line = f"ttft {metrics.ttft_ms.p50:.0f} ms · cv {metrics.ttft_ms.cv:.1%}"
+        if metrics.decode_tok_s is not None:
+            line += f" · {metrics.decode_tok_s.p50:.2f} tok/s"
+        return line
+    if metrics.latency_ms is not None:
+        return f"p50 {metrics.latency_ms.p50:.2f} ms · cv {metrics.latency_ms.cv:.1%}"
+    return ""
+
+
 def run_sweep(
     model_refs: Iterable[str],
     recipe_paths: Iterable[Path],
@@ -125,7 +145,9 @@ def run_sweep(
 ) -> SweepReport:
     """Measure every (model, recipe) cell, recording every outcome."""
     from edgefit.backends.artifacts import (  # noqa: PLC0415 - keeps torch out of import time
+        UnsupportedDecoderLowering,
         UnsupportedQuantizationError,
+        recipe_applicability,
         resolve_artifact,
     )
     from edgefit.cli.recipes import load_recipe  # noqa: PLC0415
@@ -143,6 +165,14 @@ def run_sweep(
 
     for cell in cells:
         recipe = load_recipe(cell.recipe_path, cell.model_ref)
+
+        # Tier 0: legality. An illegal pair was never a candidate (§5.4), so it is
+        # skipped rather than written as a failure row.
+        reason = recipe_applicability(resolve(cell.model_ref), recipe)
+        if reason is not None:
+            report.not_applicable += 1
+            emit("skipped", cell, reason)
+            continue
 
         if resume and store.has_measurement(recipe.recipe_id, device.device_id, HARNESS_VERSION):
             report.resumed += 1
@@ -171,7 +201,7 @@ def run_sweep(
         # Tier 0: lowering. An unsupported recipe is a recorded failure.
         try:
             artifact = resolve_artifact(resolve(cell.model_ref), recipe)
-        except UnsupportedQuantizationError as exc:
+        except (UnsupportedQuantizationError, UnsupportedDecoderLowering) as exc:
             record = _lowering_failure_record(recipe, device, gate, str(exc))
             store.insert_recipe(recipe)
             store.insert_measurement(record)
@@ -195,8 +225,7 @@ def run_sweep(
 
         if outcome.record.outcome is Outcome.SUCCESS:
             report.measured += 1
-            stats = outcome.record.metrics.latency_ms  # type: ignore[union-attr]
-            emit("measured", cell, f"p50 {stats.p50:.2f} ms · cv {stats.cv:.1%}")
+            emit("measured", cell, _describe(outcome.record))
         elif outcome.record.outcome is Outcome.LOWERING_FAILURE:
             report.lowering_failures += 1
             emit("failed", cell, outcome.record.failure_reason or "")

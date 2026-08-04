@@ -22,6 +22,12 @@ class MeasurementPolicy:
     # number should not be trusted. Recorded, not silently discarded — a noisy
     # result is itself evidence about the device.
     max_acceptable_cv: float = 0.10
+    decode_tokens: int = 32
+    """Decode steps per generative run.
+
+    Long enough for tok/s to stabilise past the first-step transient, short enough
+    that a sweep finishes. Sustained throughput under thermal soak is a different
+    measurement and belongs to the stress bench (§5.6), not here."""
 
     def __post_init__(self) -> None:
         if self.runs < MIN_RUNS:

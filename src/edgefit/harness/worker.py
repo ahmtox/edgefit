@@ -61,6 +61,7 @@ def _measure(job: dict) -> dict:
         recipe,
         runs=int(job["runs"]),
         warmup=int(job["warmup"]),
+        decode_tokens=int(job.get("decode_tokens", 32)),
     )
     return asdict(result)
 

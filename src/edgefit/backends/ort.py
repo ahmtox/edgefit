@@ -37,8 +37,10 @@ from edgefit.backends.analysis.ep_placement import (
 from edgefit.backends.analysis.flops import FLOPS_ESTIMATOR_VERSION, estimate_flops
 from edgefit.backends.analysis.graph import fingerprint_onnx
 from edgefit.backends.base import DeviceRun, StaticAnalysis
+from edgefit.backends.export_decoder import decoder_shape
+from edgefit.backends.export_onnx import artifact_size_bytes
 from edgefit.harness.memory import peak_rss_bytes
-from edgefit.schema.common import RuntimeKind
+from edgefit.schema.common import RuntimeKind, TaskType
 from edgefit.schema.recipe import GraphOptLevel, OrtProvider, Recipe
 
 _OPT_LEVEL = {
@@ -116,12 +118,29 @@ class OrtBackend:
             provider_options=[options for _, options in providers],
         )
 
+    def _feeds(self, artifact_dir: Path, recipe: Recipe) -> dict[str, np.ndarray]:
+        """The input feed for one forward pass.
+
+        A decoder needs its past-key/value inputs present even for a single pass —
+        prefill is a step whose past has zero length — so the feed is the pinned
+        prompt plus empty cache tensors. Omitting them makes ORT reject the run with
+        32 missing inputs, which is how this was found.
+        """
+        with np.load(artifact_dir / "inputs.npz") as data:
+            feeds = {name: data[name] for name in data.files}
+        if recipe.model.task is TaskType.GENERATE:
+            import json  # noqa: PLC0415
+
+            meta = json.loads((artifact_dir / "meta.json").read_text())
+            feeds |= decoder_shape(meta).empty_past()
+        return feeds
+
     # -- tier 1: static analysis ------------------------------------------
 
     def analyze(self, artifact_dir: Path, recipe: Recipe) -> StaticAnalysis:
         """Lower, fingerprint, and determine what the partitioner actually claimed."""
         model_path = artifact_dir / "model.onnx"
-        artifact_bytes = sum(p.stat().st_size for p in artifact_dir.glob("*.onnx*"))
+        artifact_bytes = artifact_size_bytes(artifact_dir)
 
         try:
             model = onnx.load(str(model_path))
@@ -135,8 +154,7 @@ class OrtBackend:
         fingerprint = fingerprint_onnx(model)
         flops = estimate_flops(model)
 
-        with np.load(artifact_dir / "inputs.npz") as data:
-            feeds = {name: data[name] for name in data.files}
+        feeds = self._feeds(artifact_dir, recipe)
 
         with tempfile.TemporaryDirectory() as scratch:
             prefix = os.path.join(scratch, "analysis")
@@ -239,16 +257,18 @@ class OrtBackend:
     # -- tier 2: device measurement ---------------------------------------
 
     def measure(
-        self, artifact_dir: Path, recipe: Recipe, runs: int, warmup: int
+        self, artifact_dir: Path, recipe: Recipe, runs: int, warmup: int, decode_tokens: int = 32
     ) -> DeviceRun:
         """Timed runs at the configured optimisation level.
 
         Runs inside the measurement subprocess, so ``peak_rss_bytes`` here is this
         process's own high-water mark and is attributable to this recipe alone.
         """
+        if recipe.model.task is TaskType.GENERATE:
+            return self._measure_generative(artifact_dir, recipe, runs, warmup, decode_tokens)
+
         model_path = artifact_dir / "model.onnx"
-        with np.load(artifact_dir / "inputs.npz") as data:
-            feeds = {name: data[name] for name in data.files}
+        feeds = self._feeds(artifact_dir, recipe)
 
         try:
             session = self._create_session(
@@ -283,4 +303,104 @@ class OrtBackend:
                 name: np.asarray(value).ravel()[:512].tolist()
                 for name, value in zip(output_names, outputs or [], strict=False)
             },
+        )
+
+    # -- tier 2, generative: prefill then decode -----------------------------
+
+    def _measure_generative(
+        self, artifact_dir: Path, recipe: Recipe, runs: int, warmup: int, decode_tokens: int
+    ) -> DeviceRun:
+        """Measure TTFT and decode throughput separately.
+
+        Two distributions, not one, because prefill and decode are different
+        workloads (PROJECT.md §2.3). A single averaged "latency" for a generative
+        model describes neither phase and is the number vendors most often quote.
+
+        The KV cache is threaded through explicitly: each step feeds the previous
+        step's ``present`` tensors back in as ``past``. Without that the graph would
+        reprocess the whole sequence every step and the tok/s figure would be
+        fiction.
+        """
+        import json  # noqa: PLC0415
+
+        model_path = artifact_dir / "model.onnx"
+        meta = json.loads((artifact_dir / "meta.json").read_text())
+        shape = decoder_shape(meta)
+
+        with np.load(artifact_dir / "inputs.npz") as data:
+            prompt_ids = data["input_ids"]
+            prompt_mask = data["attention_mask"]
+            prompt_positions = data["position_ids"]
+
+        try:
+            session = self._create_session(
+                model_path, recipe, opt_level=recipe.runtime.graph_optimization_level
+            )
+        except Exception as exc:  # noqa: BLE001
+            return DeviceRun(failure_reason=f"session creation failed: {exc}")
+
+        past_names, present_names = shape.past_names, shape.present_names
+
+        def one_run() -> tuple[float, float, list[int]]:
+            """Returns (ttft_ms, decode_tok_s, tokens)."""
+            past = shape.empty_past()
+            total = int(prompt_ids.shape[1])
+            tokens: list[int] = []
+
+            # --- prefill: the whole prompt in one pass. This is TTFT. ---
+            started = time.perf_counter_ns()
+            outputs = session.run(
+                None,
+                {
+                    "input_ids": prompt_ids,
+                    "attention_mask": prompt_mask,
+                    "position_ids": prompt_positions,
+                    **past,
+                },
+            )
+            ttft_ms = (time.perf_counter_ns() - started) / 1e6
+            tokens.append(int(np.asarray(outputs[0])[0, -1].argmax()))
+            past = dict(zip(past_names, outputs[1:], strict=True))
+            total += 1
+
+            # --- decode: one token at a time, re-feeding the cache. ---
+            decode_started = time.perf_counter_ns()
+            for _ in range(decode_tokens):
+                feeds = {
+                    "input_ids": np.array([[tokens[-1]]], dtype=np.int64),
+                    "attention_mask": np.ones((1, total), dtype=np.int64),
+                    # Rotary position of the token being generated. Must advance, or
+                    # every step re-uses prefill's positions and the text diverges.
+                    "position_ids": np.array([[total - 1]], dtype=np.int64),
+                    **past,
+                }
+                outputs = session.run(None, feeds)
+                tokens.append(int(np.asarray(outputs[0])[0, -1].argmax()))
+                past = dict(zip(past_names, outputs[1:], strict=True))
+                total += 1
+            decode_s = (time.perf_counter_ns() - decode_started) / 1e9
+            return ttft_ms, (decode_tokens / decode_s if decode_s else 0.0), tokens
+
+        try:
+            for _ in range(warmup):
+                one_run()
+            ttft_samples: list[float] = []
+            decode_samples: list[float] = []
+            tokens: list[int] = []
+            for _ in range(runs):
+                ttft, rate, tokens = one_run()
+                ttft_samples.append(ttft)
+                decode_samples.append(rate)
+        except Exception as exc:  # noqa: BLE001
+            return DeviceRun(
+                failure_reason=f"generative inference failed: {exc}", warmup_count=warmup
+            )
+
+        assert present_names  # names are paired with outputs above
+        return DeviceRun(
+            peak_rss_bytes=peak_rss_bytes(),
+            warmup_count=warmup,
+            ttft_samples_ms=ttft_samples,
+            decode_samples_tok_s=decode_samples,
+            generated_tokens=tokens,
         )

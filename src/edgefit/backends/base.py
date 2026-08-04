@@ -53,9 +53,23 @@ class DeviceRun:
     outputs: dict[str, list] | None = None
     failure_reason: str | None = None
 
+    # Generative tasks report two distributions instead of one, because prefill and
+    # decode are different workloads (PROJECT.md §2.3): prefill is compute-bound and
+    # yields TTFT, decode is bandwidth-bound and yields tok/s. Averaging them into a
+    # single "latency" would describe neither.
+    ttft_samples_ms: list[float] = field(default_factory=list)
+    decode_samples_tok_s: list[float] = field(default_factory=list)
+    generated_tokens: list[int] | None = None
+
     @property
     def succeeded(self) -> bool:
-        return self.failure_reason is None and bool(self.samples_ms)
+        if self.failure_reason is not None:
+            return False
+        return bool(self.samples_ms) or bool(self.ttft_samples_ms)
+
+    @property
+    def is_generative(self) -> bool:
+        return bool(self.ttft_samples_ms)
 
 
 @runtime_checkable

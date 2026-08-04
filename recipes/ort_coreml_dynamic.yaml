@@ -1,0 +1,8 @@
+# Dynamic-shape lowering through the CoreML EP. Expect heavy fragmentation: a
+# dynamic sequence axis is exactly what a delegate will not claim.
+extends: ort_cpu_dynamic.yaml
+label: ort-coreml-dynamic
+runtime:
+  providers: [CoreMLExecutionProvider, CPUExecutionProvider]
+  coreml_compute_units: ALL
+  coreml_model_format: NeuralNetwork

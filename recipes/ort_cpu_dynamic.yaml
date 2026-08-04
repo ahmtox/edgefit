@@ -1,0 +1,20 @@
+# Dynamic-shape lowering on CPU.
+#
+# Named for what it is. Generativeness is a property of the *model* (its task), not
+# of the recipe — a recipe describes lowering and runtime. Calling this
+# "ort-cpu-generate" made it look inapplicable to encoders when in fact it is the
+# static-versus-dynamic control for every model in the registry.
+#
+# Required for decoders: a KV cache grows one token per decode step, so the sequence
+# axis is dynamic by construction. Also the interesting axis in its own right —
+# dynamic shape is the single biggest reason a delegate declines a subgraph, which
+# is why production mobile LLM stacks preallocate a fixed-size cache and pass a
+# position index instead. We do not implement that yet, and the exporter refuses
+# static shapes for decoders rather than pretending.
+label: ort-cpu-dynamic
+runtime:
+  kind: onnxruntime
+  providers: [CPUExecutionProvider]
+  graph_optimization_level: all
+lowering:
+  static_shapes: false

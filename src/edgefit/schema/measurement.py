@@ -29,7 +29,8 @@ from edgefit.schema.host import DeviceFingerprint, HostState
 # is measurably not the partition executed at the configured level.
 # v5 adds measurement_source, so a third party's reported figure can enter the
 # corpus without impersonating one of our own measurements.
-MEASUREMENT_SCHEMA_VERSION = 5
+# v6 adds token_agreement, the generative analogue of the numerics check.
+MEASUREMENT_SCHEMA_VERSION = 6
 
 # PROJECT.md §14.2. Not a suggestion, and not configurable downwards.
 MIN_RUNS = 5
@@ -232,6 +233,16 @@ class Metrics(_Frozen):
         default=None, description="Task accuracy on an eval set. Tier 3; not implemented yet."
     )
     accuracy_delta_vs_fp16: float | None = None
+    token_agreement: float | None = Field(
+        default=None,
+        description=(
+            "Fraction of greedily-decoded tokens matching the fp32 PyTorch reference. "
+            "The generative counterpart of output_cosine_vs_reference, and a stricter "
+            "test: a graph either decodes the same text or it does not. Like cosine, "
+            "this is a numerics check and NOT task quality — identical greedy tokens "
+            "say nothing about behaviour under sampling or on a real prompt distribution."
+        ),
+    )
     output_cosine_vs_reference: float | None = Field(
         default=None,
         description=(

@@ -13,6 +13,13 @@ There is no ``UPDATE`` or ``DELETE`` anywhere in this system by design
 from __future__ import annotations
 
 DDL = """
+-- Records the schema the file was created with, so a stale corpus is detected on
+-- open rather than surfacing as a column-count error on the first insert.
+CREATE TABLE IF NOT EXISTS corpus_meta (
+    key   VARCHAR PRIMARY KEY,
+    value VARCHAR NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS recipes (
     recipe_id          VARCHAR PRIMARY KEY,
     schema_version     INTEGER NOT NULL,
@@ -80,6 +87,7 @@ CREATE TABLE IF NOT EXISTS measurements (
     accuracy              DOUBLE,
     accuracy_delta_vs_fp16 DOUBLE,
     output_cosine_vs_reference DOUBLE,
+    token_agreement       DOUBLE,
     power_mw              DOUBLE,
 
     fallback_node_pct     DOUBLE,

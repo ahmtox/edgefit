@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from edgefit.backends.export_decoder import UnsupportedDecoderLowering, export_decoder
 from edgefit.backends.export_onnx import (
     DEFAULT_ARTIFACT_ROOT,
     ExportedArtifact,
@@ -35,7 +36,35 @@ from edgefit.backends.quantize import (
 from edgefit.models.registry import ModelSpec
 from edgefit.schema.recipe import Recipe
 
-__all__ = ["UnsupportedQuantizationError", "resolve_artifact"]
+__all__ = [
+    "UnsupportedDecoderLowering",
+    "UnsupportedQuantizationError",
+    "resolve_artifact",
+]
+
+
+def recipe_applicability(spec: ModelSpec, recipe: Recipe) -> str | None:
+    """Why this recipe cannot legally apply to this model, or None if it can.
+
+    PROJECT.md §5.4 generates the recipe space from "legal recipes given task type +
+    fingerprint + targets", so an illegal pair was never a candidate. Recording it as
+    a *failure* would conflate "we tried and it broke" with "this was never a legal
+    combination", and the corpus is for measurements.
+    """
+    if spec.exporter == "decoder":
+        if recipe.lowering.static_shapes:
+            return (
+                "static shapes cannot express a KV-cached decoder: the cache grows one "
+                "token per step, so the sequence axis is dynamic by construction"
+            )
+        if recipe.quantization is not None:
+            return (
+                "quantizing a KV-cached decoder is not implemented; the cache tensors "
+                "need their own precision policy"
+            )
+    elif not recipe.lowering.static_shapes:
+        return None
+    return None
 
 
 def resolve_artifact(
@@ -51,6 +80,24 @@ def resolve_artifact(
     rather than measuring the wrong model under the right label.
     """
     root = Path(artifact_root)
+    if spec.exporter == "decoder":
+        # A KV-cached decoder is a different export shape, and quantizing one is not
+        # implemented — the cache tensors would need their own scheme.
+        if recipe.quantization is not None:
+            raise UnsupportedQuantizationError(
+                "quantizing a KV-cached decoder is not implemented: the cache tensors "
+                "need their own precision policy, and applying weight-only "
+                "quantization while leaving an fp32 cache would misreport both size "
+                "and bandwidth"
+            )
+        return export_decoder(
+            spec,
+            artifact_root=root,
+            opset=recipe.lowering.opset,
+            static_shapes=recipe.lowering.static_shapes,
+            force=force,
+        )
+
     base = export_onnx(
         spec,
         artifact_root=root,
