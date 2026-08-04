@@ -12,6 +12,6 @@ __version__ = "0.0.1"
 # measuring two different graphs sharing one identity.
 # Measurements are immutable (PROJECT.md §14.3); a re-measure inserts a new row
 # carrying the new harness_version rather than updating the old one.
-HARNESS_VERSION = "0.3.1"
+HARNESS_VERSION = "0.3.2"
 
 __all__ = ["__version__", "HARNESS_VERSION"]

@@ -100,6 +100,36 @@ def artifact_key(spec: ModelSpec, opset: int, static_shapes: bool) -> str:
     )
 
 
+def architecture_from_config(config) -> dict[str, int]:
+    """Head and layer counts, for an exact attention label in the fingerprint.
+
+    Recorded because the fingerprint is the key the cost model indexes on (§5.2), and
+    a graph alone cannot distinguish MHA from GQA — the detector correctly reports
+    UNKNOWN without these. Encoders without a `num_key_value_heads` field are
+    multi-head by definition, so the query-head count stands in for both.
+    """
+    heads = getattr(config, "num_attention_heads", None)
+    layers = getattr(config, "num_hidden_layers", None)
+    if heads is None:
+        # Some vision/dual-tower configs nest the real settings one level down.
+        for attribute in ("vision_config", "text_config", "encoder"):
+            nested = getattr(config, attribute, None)
+            if nested is not None and getattr(nested, "num_attention_heads", None):
+                heads = nested.num_attention_heads
+                layers = getattr(nested, "num_hidden_layers", layers)
+                config = nested
+                break
+    if heads is None:
+        return {}
+    architecture = {
+        "n_heads": int(heads),
+        "kv_heads": int(getattr(config, "num_key_value_heads", heads) or heads),
+    }
+    if layers:
+        architecture["layers"] = int(layers)
+    return architecture
+
+
 def _load_hf_model(spec: ModelSpec):
     """Instantiate the model class the spec names, optionally a submodule of it."""
     import transformers  # noqa: PLC0415
@@ -154,7 +184,7 @@ def _build_text(spec: ModelSpec):
             outputs = self.inner(**dict(zip(names, tensors, strict=True)))
             return getattr(outputs, output_attr)
 
-    return TextWrapper(model).eval(), names, args, [output_attr]
+    return TextWrapper(model).eval(), names, args, [output_attr], model.config
 
 
 def _build_vision(spec: ModelSpec):
@@ -187,7 +217,13 @@ def _build_vision(spec: ModelSpec):
         def forward(self, pixel_values):
             return getattr(self.inner(pixel_values=pixel_values), output_attr)
 
-    return VisionWrapper(model).eval(), ["pixel_values"], (pixel_values,), [output_attr]
+    return (
+        VisionWrapper(model).eval(),
+        ["pixel_values"],
+        (pixel_values,),
+        [output_attr],
+        model.config,
+    )
 
 
 _BUILDERS = {"text": _build_text, "vision": _build_vision}
@@ -234,7 +270,7 @@ def export_onnx(
         raise ValueError(f"no exporter named {spec.exporter!r} for {spec.ref}")
 
     directory.mkdir(parents=True, exist_ok=True)
-    wrapper, input_names, args, output_names = builder(spec)
+    wrapper, input_names, args, output_names, hf_config = builder(spec)
 
     dynamic_axes = None
     if not static_shapes:
@@ -276,6 +312,7 @@ def export_onnx(
                 "output_names": output_names,
                 "lowering_ms": lowering_ms,
                 "torch_version": torch.__version__,
+                **architecture_from_config(hf_config),
             },
             indent=2,
         )

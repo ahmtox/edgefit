@@ -130,6 +130,13 @@ def resolve_artifact(
     quantize_ms = quantize_artifact(base.model_path, directory, recipe.quantization)
     copy_harness_inputs(base.directory, directory)
 
+    # Carry the base export's architecture facts into the variant, so a quantized
+    # artifact still fingerprints with an exact attention label.
+    base_meta = json.loads((base.directory / "meta.json").read_text())
+    architecture = {
+        key: base_meta[key] for key in ("layers", "n_heads", "kv_heads") if key in base_meta
+    }
+
     total_ms = quantize_ms + (0.0 if base.was_cached else base.lowering_ms)
     meta_path.write_text(
         json.dumps(
@@ -140,6 +147,7 @@ def resolve_artifact(
                 "quantization": recipe.quantization.model_dump(mode="json"),
                 "quantize_ms": quantize_ms,
                 "lowering_ms": total_ms,
+                **architecture,
             },
             indent=2,
         )
