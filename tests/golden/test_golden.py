@@ -17,8 +17,8 @@ import pytest
 import yaml
 
 from edgefit.corpus.store import CorpusStore
-from edgefit.harness.gate import GateThresholds, evaluate_gate
-from edgefit.harness.hostinfo import probe_device, probe_state
+from edgefit.harness.gate import GateThresholds, current_gate
+from edgefit.harness.hostinfo import probe_device
 from edgefit.harness.runner import measure
 from edgefit.harness.timing import MeasurementPolicy
 from edgefit.models.registry import resolve
@@ -53,16 +53,27 @@ ALLOW_UNFIT = os.environ.get("EDGEFIT_GOLDEN_ALLOW_UNFIT") == "1"
 
 
 @pytest.fixture(scope="session")
-def host_is_fit() -> bool:
-    return evaluate_gate(probe_state()).passed
+def host_gate():
+    """One fitness decision for the whole session, via the canonical path.
+
+    Evaluating without the calibration probe would apply the load-average rule the
+    probe supersedes, and disagree with what `edgefit measure` and the sweep decide
+    about the same machine.
+    """
+    return current_gate()
 
 
 @pytest.fixture(scope="session")
-def fit_host(host_is_fit: bool) -> None:
+def host_is_fit(host_gate) -> bool:
+    return host_gate.passed
+
+
+@pytest.fixture(scope="session")
+def fit_host(host_is_fit: bool, host_gate) -> None:
     """Refuse to produce golden numbers on a host that cannot produce good ones."""
     if host_is_fit:
         return
-    report = evaluate_gate(probe_state())
+    report = host_gate
     if not ALLOW_UNFIT:
         pytest.skip(
             f"host is not fit to measure — {report.reason()}. "
@@ -111,7 +122,7 @@ def corpus(tmp_path_factory) -> CorpusStore:
 
 
 @pytest.fixture(scope="session")
-def results(fit_host, host_class_matches, artifacts, corpus) -> dict[str, object]:
+def results(fit_host, host_class_matches, artifacts, corpus, host_is_fit) -> dict[str, object]:
     """Run every fixture once and share the outcomes across assertions."""
     from edgefit.cli.recipes import load_recipe
 
@@ -127,7 +138,7 @@ def results(fit_host, host_class_matches, artifacts, corpus) -> dict[str, object
             min_available_ram_bytes=0,
             max_calibration_ratio=float("inf"),
         )
-        if ALLOW_UNFIT and not evaluate_gate(probe_state()).passed
+        if ALLOW_UNFIT and not host_is_fit
         else None
     )
 

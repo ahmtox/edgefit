@@ -17,7 +17,12 @@ from rich.table import Table
 from edgefit import HARNESS_VERSION, __version__
 from edgefit.cli.recipes import available_recipes, load_recipe
 from edgefit.corpus.store import DEFAULT_CORPUS_PATH, CorpusStore
-from edgefit.harness.gate import BaselineStore, GateThresholds, evaluate_gate, run_calibration_probe
+from edgefit.harness.gate import (
+    BaselineStore,
+    GateThresholds,
+    current_gate,
+    evaluate_gate,
+)
 from edgefit.harness.hostinfo import probe_device, probe_state
 from edgefit.harness.runner import measure as run_measurement
 from edgefit.harness.timing import MeasurementPolicy
@@ -105,8 +110,12 @@ def doctor(
     console.print(identity)
     console.print()
 
-    probe = run_calibration_probe(baselines.get(device)) if calibrate else None
-    report = evaluate_gate(probe_state(), calibration_probe=probe)
+    if calibrate:
+        report = current_gate(device=device, record_baseline=False)
+        probe = report.calibration_probe
+    else:
+        probe = None
+        report = evaluate_gate(probe_state(), calibration_probe=None)
 
     checks = Table(header_style="bold")
     checks.add_column(" ", width=1)

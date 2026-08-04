@@ -291,6 +291,31 @@ def device_lock(device: DeviceFingerprint, timeout_s: float = 0.0) -> Iterator[N
 # --------------------------------------------------------------------------
 
 
+def current_gate(
+    thresholds: GateThresholds | None = None,
+    *,
+    device: DeviceFingerprint | None = None,
+    record_baseline: bool = True,
+) -> GateReport:
+    """The canonical "is this host fit right now" answer.
+
+    Always runs the calibration probe, because the gate's rules depend on it: with
+    a baseline present the probe supersedes load average, so evaluating without one
+    applies a stricter and already-superseded rule. Three call sites were each
+    deciding fitness slightly differently until this existed — `doctor` probed, the
+    golden suite did not, and the two disagreed about the same machine.
+    """
+    from edgefit.harness.hostinfo import probe_device, probe_state  # noqa: PLC0415
+
+    device = device or probe_device()
+    baselines = BaselineStore()
+    probe = run_calibration_probe(baselines.get(device))
+    report = evaluate_gate(probe_state(), thresholds, probe)
+    if record_baseline and report.passed_ignoring_probe:
+        baselines.record(device, probe.elapsed_ms)
+    return report
+
+
 def wait_until_fit(
     thresholds: GateThresholds | None = None,
     *,
@@ -307,19 +332,13 @@ def wait_until_fit(
     ``gate_refused`` rows and measures nothing. Waiting is what lets a laptop
     produce a usable corpus overnight.
     """
-    from edgefit.harness.hostinfo import probe_device, probe_state  # noqa: PLC0415
+    from edgefit.harness.hostinfo import probe_device  # noqa: PLC0415
 
     device = device or probe_device()
-    baselines = BaselineStore()
     deadline = time.monotonic() + timeout_s
 
     while True:
-        probe = run_calibration_probe(baselines.get(device))
-        report = evaluate_gate(probe_state(), thresholds, probe)
-        if report.passed_ignoring_probe:
-            # A legitimate observation of healthy throughput even if the ratio
-            # check failed — this is what lets the baseline self-correct.
-            baselines.record(device, probe.elapsed_ms)
+        report = current_gate(thresholds, device=device)
         if report.passed:
             return report
         remaining = deadline - time.monotonic()
