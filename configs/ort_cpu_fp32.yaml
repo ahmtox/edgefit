@@ -1,0 +1,7 @@
+# Baseline: pure CPU, fp32, all graph optimisations. The "before" number every
+# other config is compared against.
+label: ort-cpu-fp32
+runtime:
+  kind: onnxruntime
+  providers: [CPUExecutionProvider]
+  graph_optimization_level: all

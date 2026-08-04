@@ -1,0 +1,10 @@
+# CoreML pinned to the Neural Engine. Restricting compute units usually shrinks
+# what the partitioner will claim — the fallback delta against ort_coreml_fp32
+# is the point of measuring it.
+label: ort-coreml-ane
+runtime:
+  kind: onnxruntime
+  providers: [CoreMLExecutionProvider, CPUExecutionProvider]
+  graph_optimization_level: all
+  coreml_compute_units: CPUAndNeuralEngine
+  coreml_model_format: NeuralNetwork

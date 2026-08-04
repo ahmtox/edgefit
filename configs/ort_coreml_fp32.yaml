@@ -1,0 +1,12 @@
+# CoreML EP with CPU fallback — the default a team would reach for on Apple
+# silicon, and the config that exposes silent CPU fallback (PROJECT.md §2.2).
+#
+# Pinned to the NeuralNetwork model format on purpose: see
+# configs/ort_coreml_mlprogram.yaml for why MLProgram is not the default here.
+label: ort-coreml-fp32
+runtime:
+  kind: onnxruntime
+  providers: [CoreMLExecutionProvider, CPUExecutionProvider]
+  graph_optimization_level: all
+  coreml_compute_units: ALL
+  coreml_model_format: NeuralNetwork

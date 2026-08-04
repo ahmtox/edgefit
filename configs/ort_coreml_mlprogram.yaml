@@ -1,0 +1,20 @@
+# KNOWN CRASH, kept deliberately.
+#
+# ORT 1.28 + CoreML EP + ModelFormat=MLProgram aborts the process (SIGABRT) on
+# all-MiniLM-L6-v2:
+#
+#   'mps.matmul' op contracting dimensions differ 1 & 384
+#   ... (tensor<1x128x1xf32>, tensor<384x384xf32>) -> tensor<1x128x384xf32>
+#   MPSGraphExecutable.mm:975: failed assertion `original module failed verification'
+#
+# Isolated to this one flag: NeuralNetwork and unset both lower and run fine.
+# Kept in the repo because (a) it proves the harness survives a delegate-level
+# crash and records it, and (b) per §5.8 the failure row is what teaches the
+# tier-1 filter to stop proposing this config.
+label: ort-coreml-mlprogram
+runtime:
+  kind: onnxruntime
+  providers: [CoreMLExecutionProvider, CPUExecutionProvider]
+  graph_optimization_level: all
+  coreml_compute_units: ALL
+  coreml_model_format: MLProgram
