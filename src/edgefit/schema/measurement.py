@@ -20,10 +20,11 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from edgefit.schema.common import Outcome, content_hash
+from edgefit.schema.common import Outcome, StressProfile, content_hash
 from edgefit.schema.host import DeviceFingerprint, HostState
 
-MEASUREMENT_SCHEMA_VERSION = 1
+# v2 adds stress_profile (PROJECT.md §6.2, §9 step 2: "from day one").
+MEASUREMENT_SCHEMA_VERSION = 2
 
 # PROJECT.md §14.2. Not a suggestion, and not configurable downwards.
 MIN_RUNS = 5
@@ -250,6 +251,15 @@ class MeasurementRecord(_Frozen):
     device: DeviceFingerprint
     host_state: HostState
     calibration_probe: CalibrationProbe | None = None
+
+    stress_profile: StressProfile = Field(
+        default=StressProfile.CLEAN,
+        description=(
+            "Which rung of the §5.6 validation ladder produced this row. Only the "
+            "clean bench exists today; soak/pressure/concurrent arrive with the "
+            "stress bench. Recorded now so old rows stay interpretable then."
+        ),
+    )
 
     outcome: Outcome
     failure_reason: str | None = None

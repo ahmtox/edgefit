@@ -21,6 +21,7 @@ from edgefit.schema import (
     Metrics,
     Outcome,
     RunStats,
+    StressProfile,
 )
 
 SAMPLES = [4.81, 4.92, 5.03, 4.88, 5.21, 4.95]
@@ -167,6 +168,35 @@ class TestMeasurementRecord:
         first = _record(device, host_state)
         second = _record(device, host_state, created_at=first.created_at.replace(microsecond=1))
         assert first.measurement_id != second.measurement_id
+
+    def test_defaults_to_the_clean_bench(
+        self, device: DeviceFingerprint, host_state: HostState
+    ) -> None:
+        """Only the clean rung of the §5.6 ladder exists today, so it is the default."""
+        assert _record(device, host_state).stress_profile is StressProfile.CLEAN
+
+    @pytest.mark.parametrize("profile", list(StressProfile))
+    def test_records_every_rung_of_the_validation_ladder(
+        self, device: DeviceFingerprint, host_state: HostState, profile: StressProfile
+    ) -> None:
+        """§2.2 puts the benchmark-to-production P99 gap at 3-5x.
+
+        A corpus that cannot distinguish a clean run from a thermally soaked one
+        can never quantify that gap, which is why the field lands before the
+        stress bench that populates it.
+        """
+        assert _record(device, host_state, stress_profile=profile).stress_profile is profile
+
+    def test_stress_profile_changes_the_measurement_id(
+        self, device: DeviceFingerprint, host_state: HostState
+    ) -> None:
+        """Same recipe under different conditions is a different observation."""
+        clean = _record(device, host_state)
+        soaked = _record(
+            device, host_state, stress_profile=StressProfile.THERMAL_SOAK,
+            created_at=clean.created_at,
+        )
+        assert clean.measurement_id != soaked.measurement_id
 
     def test_id_reflects_os_build(
         self, device: DeviceFingerprint, host_state: HostState

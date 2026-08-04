@@ -93,6 +93,22 @@ class NormType(StrEnum):
     UNKNOWN = "unknown"
 
 
+class StressProfile(StrEnum):
+    """Condition a measurement was taken under (PROJECT.md §5.6, §6.2).
+
+    The staged validation ladder is about *trust*, distinct from the cost cascade
+    which is about *search economics*. Everyone benchmarks clean cold devices; no
+    user has one, and §2.2 puts the resulting P99 gap at 3–5x. Recording the
+    profile on every row is what makes that gap measurable later — a corpus that
+    cannot distinguish clean from soaked can never quantify it.
+    """
+
+    CLEAN = "clean"
+    THERMAL_SOAK = "thermal_soak"
+    MEMORY_PRESSURE = "memory_pressure"
+    CONCURRENT_LOAD = "concurrent_load"
+
+
 class PowerSource(StrEnum):
     AC = "ac"
     BATTERY = "battery"

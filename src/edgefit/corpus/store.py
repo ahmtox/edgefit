@@ -31,7 +31,9 @@ DEFAULT_CORPUS_PATH = Path("corpus/measurements.duckdb")
 # query() is for reading. This is a guard rail, not a security boundary — but it
 # means an accidental mutating statement fails loudly instead of quietly
 # violating the one rule the whole corpus depends on.
-_READ_ONLY_STATEMENT = re.compile(r"^\s*(select|with|describe|explain|pragma|show)\b", re.IGNORECASE)
+_READ_ONLY_STATEMENT = re.compile(
+    r"^\s*(select|with|describe|explain|pragma|show)\b", re.IGNORECASE
+)
 
 
 class DuplicateRecordError(Exception):
@@ -162,7 +164,7 @@ class CorpusStore:
                 $measurement_id, $schema_version, $harness_version, $created_at,
                 $config_id, $model_ref, $graph_fingerprint_id,
                 $device_id, $sku_id, $device_model, $soc, $os_name, $os_version, $os_build,
-                $outcome, $failure_reason, $run_count, $warmup_count,
+                $stress_profile, $outcome, $failure_reason, $run_count, $warmup_count,
                 $latency_p50_ms, $latency_p95_ms, $latency_cv,
                 $ttft_p50_ms, $decode_tok_s_p50, $sustained_tok_s_5min,
                 $peak_rss_bytes, $artifact_bytes, $lowering_ms,
@@ -187,6 +189,7 @@ class CorpusStore:
                 "os_name": record.device.os_name,
                 "os_version": record.device.os_version,
                 "os_build": record.device.os_build,
+                "stress_profile": str(record.stress_profile),
                 "outcome": str(record.outcome),
                 "failure_reason": record.failure_reason,
                 "run_count": record.run_count,
