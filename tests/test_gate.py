@@ -356,9 +356,15 @@ class TestWaitUntilFitTerminates:
     the contract instead of the explanation.
     """
 
-    def test_returns_immediately_when_the_host_is_fit(
+    def test_confirms_a_fit_host_without_a_full_poll_interval(
         self, monkeypatch, device
     ) -> None:
+        """A fit host is confirmed by a short settling streak, not a poll cycle.
+
+        This deliberately no longer returns on the *first* passing probe — see
+        TestSustainedFitness for why one reading is not enough. What it must not do is
+        wait a full poll interval for a host that is genuinely quiet.
+        """
         from edgefit.harness import gate as gate_module
 
         monkeypatch.setattr(gate_module, "probe_device", lambda: device, raising=False)
@@ -366,9 +372,12 @@ class TestWaitUntilFitTerminates:
             gate_module, "current_gate", lambda *a, **k: evaluate_gate(_state())
         )
         started = time.monotonic()
-        report = gate_module.wait_until_fit(timeout_s=30, poll_s=5, device=device)
+        report = gate_module.wait_until_fit(
+            timeout_s=30, poll_s=20, settle_s=0.05, device=device
+        )
+        elapsed = time.monotonic() - started
         assert report.passed
-        assert time.monotonic() - started < 1.0, "a fit host must not be slept on"
+        assert elapsed < 1.0, f"a quiet host took {elapsed:.2f}s to confirm"
 
     def test_gives_up_at_the_deadline(self, monkeypatch, device) -> None:
         """The property that failed in the field: it must stop waiting."""
@@ -414,3 +423,80 @@ class TestWaitUntilFitTerminates:
         )
         assert seen, "an operator must be told why the wait is happening"
         assert "thermal state" in seen[0]
+
+
+class TestSustainedFitness:
+    """A single probe dip is not evidence the host is quiet.
+
+    The probe fluctuates, so a contended machine crosses the threshold periodically.
+    Accepting the first crossing measures the dip, not the condition: on 2026-08-04 a
+    sweep waited correctly at 1.24-1.30x baseline, measured the instant it read 1.14x,
+    and recorded a row with 75% coefficient of variation into a corpus whose clean
+    runs sit under 4%.
+    """
+
+    def test_requires_several_passing_probes_in_a_row(self, monkeypatch, device) -> None:
+        from edgefit.harness import gate as gate_module
+
+        fit = evaluate_gate(_state())
+        unfit = evaluate_gate(_state(thermal_state=ThermalState.SERIOUS))
+        # dip, dip, then genuinely settled
+        sequence = [fit, unfit, fit, fit, fit]
+        seen = iter(sequence)
+        monkeypatch.setattr(gate_module, "current_gate", lambda *a, **k: next(seen))
+        monkeypatch.setattr(gate_module.time, "sleep", lambda _s: None)
+
+        report = gate_module.wait_until_fit(
+            timeout_s=30, poll_s=0.01, settle_s=0.01, consecutive=3, device=device
+        )
+        assert report.passed
+        # the lone early pass must not have satisfied it
+        assert list(seen) == [], "should have consumed the whole settling sequence"
+
+    def test_a_single_pass_is_not_enough(self, monkeypatch, device) -> None:
+        from edgefit.harness import gate as gate_module
+
+        calls: list[int] = []
+        fit = evaluate_gate(_state())
+
+        def probe(*args, **kwargs):
+            calls.append(1)
+            return fit
+
+        monkeypatch.setattr(gate_module, "current_gate", probe)
+        monkeypatch.setattr(gate_module.time, "sleep", lambda _s: None)
+        gate_module.wait_until_fit(
+            timeout_s=30, poll_s=0.01, settle_s=0.01, consecutive=3, device=device
+        )
+        assert len(calls) == 3, f"expected 3 confirming probes, got {len(calls)}"
+
+    def test_the_streak_resets_on_a_failure(self, monkeypatch, device) -> None:
+        from edgefit.harness import gate as gate_module
+
+        fit = evaluate_gate(_state())
+        unfit = evaluate_gate(_state(thermal_state=ThermalState.SERIOUS))
+        sequence = iter([fit, fit, unfit, fit, fit, fit])
+        monkeypatch.setattr(gate_module, "current_gate", lambda *a, **k: next(sequence))
+        monkeypatch.setattr(gate_module.time, "sleep", lambda _s: None)
+
+        report = gate_module.wait_until_fit(
+            timeout_s=30, poll_s=0.01, settle_s=0.01, consecutive=3, device=device
+        )
+        assert report.passed
+        assert list(sequence) == [], "a failure mid-streak must restart the count"
+
+    def test_still_gives_up_at_the_deadline(self, monkeypatch, device) -> None:
+        """Sustained fitness must not become an unbounded wait."""
+        from edgefit.harness import gate as gate_module
+
+        monkeypatch.setattr(
+            gate_module,
+            "current_gate",
+            lambda *a, **k: evaluate_gate(_state(thermal_state=ThermalState.SERIOUS)),
+        )
+        started = time.monotonic()
+        report = gate_module.wait_until_fit(
+            timeout_s=0.5, poll_s=0.1, settle_s=0.1, device=device
+        )
+        assert not report.passed
+        assert time.monotonic() - started < 5.0

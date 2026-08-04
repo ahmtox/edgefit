@@ -21,7 +21,7 @@ from typing import Any, Self
 import duckdb
 
 from edgefit.corpus.ddl import DDL
-from edgefit.schema.common import canonical_json
+from edgefit.schema.common import canonical_json, content_hash
 from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.measurement import MEASUREMENT_SCHEMA_VERSION, MeasurementRecord
 from edgefit.schema.recipe import Recipe
@@ -72,28 +72,40 @@ class CorpusStore:
         self._check_schema_version()
 
     def _check_schema_version(self) -> None:
-        expected = str(MEASUREMENT_SCHEMA_VERSION)
+        """Reject a corpus whose record schema *or* table shape differs from this build.
+
+        Both are checked because they move independently: adding a denormalised column
+        changes the tables without touching the record version, and that slipped
+        through as DuckDB's "Referenced column not found" on the first query.
+        """
+        self._check_one(
+            "measurement_schema_version",
+            str(MEASUREMENT_SCHEMA_VERSION),
+            "record schema",
+        )
+        self._check_one("table_shape", content_hash(DDL), "table shape")
+
+    def _check_one(self, key: str, expected: str, description: str) -> None:
         row = self._conn.execute(
-            "SELECT value FROM corpus_meta WHERE key = 'measurement_schema_version'"
+            "SELECT value FROM corpus_meta WHERE key = $key", {"key": key}
         ).fetchone()
         if row is None:
             rows = self._conn.execute("SELECT count(*) FROM measurements").fetchone()
             if rows and rows[0]:
                 raise CorpusSchemaMismatch(
-                    f"{self.path} holds {rows[0]} measurements but records no schema "
-                    f"version, so it predates version tracking. Current schema is v{expected}. "
-                    "Export what you need and rebuild, or write a migration."
+                    f"{self.path} holds {rows[0]} measurements but records no "
+                    f"{description}, so it predates this check. Export what you need and "
+                    "rebuild, or write a migration."
                 )
             self._conn.execute(
-                "INSERT INTO corpus_meta VALUES ('measurement_schema_version', $v)",
-                {"v": expected},
+                "INSERT INTO corpus_meta VALUES ($key, $v)", {"key": key, "v": expected}
             )
             return
         if row[0] != expected:
             raise CorpusSchemaMismatch(
-                f"{self.path} was written with measurement schema v{row[0]}; this build "
-                f"expects v{expected}. Measurements are immutable, so migrate the rows "
-                "into the new schema or start a new corpus file."
+                f"{self.path} was written with a different {description} "
+                f"({row[0]}; this build expects {expected}). Measurements are immutable, "
+                "so migrate the rows or start a new corpus file."
             )
 
     # -- lifecycle ---------------------------------------------------------
@@ -212,7 +224,7 @@ class CorpusStore:
                 $fallback_node_pct, $fallback_flops_pct, $fallback_time_pct,
                 $as_run_node_pct, $as_run_time_pct, $as_run_partitions,
                 $power_source, $low_power_mode, $thermal_state, $load_avg_1m,
-                $calibration_ratio, $payload
+                $calibration_ratio, $notes, $payload
             )
             """,
             {
@@ -268,6 +280,7 @@ class CorpusStore:
                 "thermal_state": str(record.host_state.thermal_state),
                 "load_avg_1m": record.host_state.load_avg_1m,
                 "calibration_ratio": probe.ratio_to_baseline if probe else None,
+                "notes": record.notes,
                 "payload": canonical_json(record.model_dump(mode="json")),
             },
         )

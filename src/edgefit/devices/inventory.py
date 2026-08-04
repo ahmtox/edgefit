@@ -126,7 +126,10 @@ def qai_hub_inventory(
     uptime. ``edgefit devices refresh`` updates it.
 
     ``reachable`` defaults to False: a catalogue entry is not capacity. As of
-    2026-08-03 this account can read all 78 entries and provision none of them.
+    2026-08-04 the vendor will provision these devices, but we have no backend that
+    submits to them, so nothing here can produce a measurement today. See
+    :data:`QAI_HUB_BLOCKED` for the distinction — it is deliberate, because
+    "the vendor refuses" and "we haven't written it" call for different work.
     """
     path = Path(cache_path)
     if not path.exists():
@@ -165,15 +168,21 @@ def qai_hub_inventory(
 
 
 #: Why AI Hub devices are listed but not reachable. Stated once, carried everywhere.
+#:
+#: Corrected 2026-08-04. This previously claimed a Qualcomm-side entitlement blocked
+#: provisioning. That was wrong: it generalised from ``submit_compile_job``, the one
+#: job type that is genuinely broken, to device access as a whole. Profile and
+#: inference jobs provision real hardware on this account and return raw per-run
+#: samples plus per-node NPU/CPU placement.
 QAI_HUB_BLOCKED = (
-    "Qualcomm AI Hub lists these devices for this account but will not provision any "
-    "of them: every compile submission is rejected with 'No devices match the given OS "
-    "name, version, and attributes'. Ruled out: device-spec form (4 variants), device "
-    "generation (8 devices, Snapdragon 845 through 8 Elite), API endpoint (workbench "
-    "and app), and project scoping. Authentication, uploads and all reads succeed, and "
-    "the rejected device record is byte-identical to the one the server returned — so "
-    "this is an account entitlement on Qualcomm's side. Organisation tier is "
-    "'Community'. Full diagnosis: docs/qai-hub-device-access.md"
+    "Qualcomm AI Hub will provision these devices — profile and inference jobs reach "
+    "SUCCESS on this account, verified 2026-08-04 across six devices from Snapdragon "
+    "845 to 8 Elite. They are not reachable yet because the AI Hub measurement "
+    "backend is not implemented; this is our gap, not the vendor's. When it lands, "
+    "these become reachable for fp32 ONNX profiling only: compile jobs are still "
+    "rejected server-side, so no .tflite or QNN artifacts and therefore no "
+    "Qualcomm-side quantization or delegate axis. "
+    "Full diagnosis: docs/qai-hub-device-access.md"
 )
 
 

@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS measurements (
     load_avg_1m           DOUBLE,
     calibration_ratio     DOUBLE,
 
+    notes                 VARCHAR,
     payload               VARCHAR NOT NULL
 );
 

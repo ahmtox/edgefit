@@ -316,37 +316,55 @@ def current_gate(
     return report
 
 
+#: Consecutive passing probes required before a wait is satisfied. One is not
+#: enough: the probe fluctuates, so a contended host crosses the threshold
+#: periodically, and accepting the first crossing measures the dip rather than the
+#: condition. Observed 2026-08-04 — a sweep waited correctly at 1.24–1.30x, measured
+#: the instant it read below 1.15x, and produced a row with 75% coefficient of
+#: variation into a corpus whose clean runs sit under 4%.
+CONSECUTIVE_FIT_PROBES = 3
+
+
 def wait_until_fit(
     thresholds: GateThresholds | None = None,
     *,
     device: DeviceFingerprint | None = None,
     timeout_s: float = 600.0,
     poll_s: float = 20.0,
+    consecutive: int = CONSECUTIVE_FIT_PROBES,
+    settle_s: float = 3.0,
     on_wait: Callable[[GateReport, float], None] | None = None,
 ) -> GateReport:
-    """Poll until the host is fit, or give up after ``timeout_s``.
+    """Poll until the host is *sustainably* fit, or give up after ``timeout_s``.
 
     PROJECT.md §5.6 specifies the thermal gate as "idle until temp below
     threshold" — waiting, not refusing. A single measurement is right to refuse
-    immediately, but a sweep that refuses is a sweep that writes fifty
-    ``gate_refused`` rows and measures nothing. Waiting is what lets a laptop
-    produce a usable corpus overnight.
+    immediately, but a sweep that refuses writes fifty ``gate_refused`` rows and
+    measures nothing. Waiting is what lets a laptop produce a usable corpus.
+
+    Fit means ``consecutive`` passing probes in a row rather than one, because the
+    probe is noisy and a busy machine dips under the threshold from time to time.
+    A passing-but-unconfirmed probe waits only ``settle_s``; a failing one waits a
+    full ``poll_s``, since a hot host needs real time to recover.
     """
     from edgefit.harness.hostinfo import probe_device  # noqa: PLC0415
 
     device = device or probe_device()
     deadline = time.monotonic() + timeout_s
+    streak = 0
 
     while True:
         report = current_gate(thresholds, device=device)
-        if report.passed:
+        streak = streak + 1 if report.passed else 0
+        if streak >= max(consecutive, 1):
             return report
+
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return report
         if on_wait is not None:
             on_wait(report, remaining)
-        time.sleep(min(poll_s, remaining))
+        time.sleep(min(settle_s if report.passed else poll_s, remaining))
 
 
 def _format_bytes(value: int | None) -> str:
