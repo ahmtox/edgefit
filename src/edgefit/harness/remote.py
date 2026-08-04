@@ -1,0 +1,358 @@
+"""Measurement on hosted hardware — Qualcomm AI Hub (PROJECT.md §7).
+
+> **Qualcomm AI Hub as a virtual device backend** — same interface, someone else's
+> hardware, free. Covers Snapdragon at zero capital.
+
+This is the pass that makes the corpus cross-vendor, which §12 names as the moat
+layer no silicon vendor can copy: a vendor can out-measure us on their own silicon
+and will never publish a comparison where a competitor wins.
+
+The remote path is deliberately *not* routed through ``harness.runner``. Almost every
+guarantee that module provides is about our own machine — the preflight gate, the
+exclusive device lock, the throttle probe, the out-of-process worker — and none of
+them apply to a device in someone else's rack. Pretending otherwise would mean
+recording a gate verdict about the wrong computer.
+
+What survives, and matters:
+
+* **Raw samples.** ``all_inference_times`` returns 100 per-run figures, not an
+  aggregate, so hard rule #2 is satisfied natively and ``RunStats`` — constructible
+  only from real samples — takes them directly. A service reporting a single number
+  would have had to go in ``reported_latency_ms`` instead.
+* **Measured per-node placement.** ``execution_detail`` carries a ``compute_unit`` of
+  NPU/GPU/CPU per node. That is the same question our CoreML fallback proxies answer
+  on Apple silicon, asked of a second vendor.
+
+What does not survive is honestly recorded rather than papered over: the rows are
+``measurement_source = third_party`` because the harness is theirs, and
+``stress_profile = unknown`` because we cannot see the device's thermal or power
+state.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import statistics
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+
+from edgefit import HARNESS_VERSION
+from edgefit.corpus.store import CorpusStore
+from edgefit.schema.common import (
+    MeasurementSource,
+    Outcome,
+    PowerSource,
+    StressProfile,
+    ThermalState,
+)
+from edgefit.schema.host import DeviceFingerprint, HostState
+from edgefit.schema.measurement import FallbackReport, MeasurementRecord, Metrics, RunStats
+from edgefit.schema.recipe import QaiHubRuntimeConfig, Recipe
+
+#: Leading samples discarded before aggregation.
+#:
+#: AI Hub returns every run including the cold ones, and they are dramatic: an
+#: observed series began [1865, 109, 82, 55, 57, 55] microseconds. Feeding that whole
+#: series to RunStats lets one cold outlier inflate the coefficient of variation by
+#: more than an order of magnitude. Three matches our own local warmup policy, so the
+#: two sources stay comparable, and the count is recorded on every row.
+REMOTE_WARMUP_SAMPLES = 3
+
+#: Device facts a hosted farm does not expose. Recorded as reasons, never guessed.
+_UNKNOWN_HOST = {
+    "thermal_state": "hosted device; AI Hub does not report thermal state",
+    "low_power_mode": "hosted device; power policy not visible",
+    "load_avg_1m": "hosted device; system load not visible",
+    "available_ram_bytes": "hosted device; free memory not reported",
+    "cpu_temperature_c": "hosted device; no temperature exposed",
+}
+
+
+class RemoteMeasurementError(Exception):
+    """The hosted job could not be run or its result could not be read."""
+
+
+@dataclass(frozen=True)
+class RemoteProfile:
+    """The parts of an AI Hub profile we record."""
+
+    job_id: str
+    job_url: str
+    samples_us: list[float]
+    peak_memory_bytes: int | None
+    cold_load_ms: float | None
+    warm_load_ms: float | None
+    compile_ms: float | None
+    nodes_per_unit: dict[str, int]
+    time_per_unit_us: dict[str, float]
+    device_name: str
+    device_os: str
+    device_attributes: tuple[str, ...]
+    client_version: str
+
+    @property
+    def timed_samples_ms(self) -> list[float]:
+        """Steady-state samples in milliseconds, warmup discarded."""
+        kept = self.samples_us[REMOTE_WARMUP_SAMPLES:]
+        return [value / 1000.0 for value in kept]
+
+
+def _first_number(summary: dict, *keys: str) -> float | None:
+    for key in keys:
+        value = summary.get(key)
+        if isinstance(value, int | float):
+            return float(value)
+        if isinstance(value, list) and value and isinstance(value[0], int | float):
+            return float(statistics.median(value))
+    return None
+
+
+def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> RemoteProfile:
+    """Upload the artifact and profile it on the recipe's hosted device."""
+    try:
+        import qai_hub as hub  # noqa: PLC0415
+    except ImportError as exc:  # pragma: no cover - optional extra
+        raise RemoteMeasurementError(
+            "qai-hub is not installed. Install the extra: uv sync --extra qai-hub"
+        ) from exc
+
+    runtime = recipe.runtime
+    if not isinstance(runtime, QaiHubRuntimeConfig):
+        raise RemoteMeasurementError(f"recipe runtime {runtime.kind!r} is not a hosted device")
+
+    device = _resolve_device(hub, runtime)
+    options = f"--target_runtime {runtime.target_runtime}" if runtime.target_runtime else None
+
+    try:
+        model = hub.upload_model(str(artifact_dir / "model.onnx"))
+        job = hub.submit_profile_job(
+            model=model,
+            device=device,
+            name=f"edgefit {recipe.model.ref}",
+            **({"options": options} if options else {}),
+        )
+        if not wait:
+            raise RemoteMeasurementError("non-blocking submission is not implemented")
+        profile = job.download_profile()
+    except RemoteMeasurementError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a vendor-side failure is data, not a crash
+        raise RemoteMeasurementError(f"{type(exc).__name__}: {exc}") from exc
+
+    return _parse_profile(profile, job, device, getattr(hub, "__version__", "unknown"))
+
+
+def _resolve_device(hub, runtime: QaiHubRuntimeConfig):
+    """Find the catalogued device this recipe names."""
+    wanted = runtime.device_name
+    for candidate in hub.get_devices():
+        if candidate.name != wanted:
+            continue
+        if runtime.device_os and str(candidate.os) != runtime.device_os:
+            continue
+        return candidate
+    raise RemoteMeasurementError(
+        f"{wanted!r} is not in the AI Hub catalogue for this account. "
+        "Run `edgefit devices refresh` and `edgefit devices list` to see what is."
+    )
+
+
+def _parse_profile(profile: dict, job, device, client_version: str) -> RemoteProfile:
+    summary = profile.get("execution_summary", {}) or {}
+    samples = summary.get("all_inference_times") or profile.get("all_inference_times") or []
+    if not samples:
+        raise RemoteMeasurementError(
+            "profile returned no per-run samples; without them there is no variance and "
+            "the record would be invalid (PROJECT.md §14.2)"
+        )
+
+    detail = profile.get("execution_detail") or []
+    nodes_per_unit: Counter[str] = Counter()
+    time_per_unit: Counter[str] = Counter()
+    for node in detail:
+        unit = str(node.get("compute_unit") or "UNKNOWN").upper()
+        nodes_per_unit[unit] += 1
+        with contextlib.suppress(TypeError, ValueError):
+            time_per_unit[unit] += float(node.get("execution_time") or 0.0)
+
+    return RemoteProfile(
+        job_id=job.job_id,
+        job_url=job.url,
+        samples_us=[float(v) for v in samples],
+        peak_memory_bytes=(
+            int(
+                _first_number(
+                    summary,
+                    "inference_memory_peak_range",
+                    "estimated_inference_peak_memory",
+                )
+                or 0
+            )
+            or None
+        ),
+        cold_load_ms=_scale_ms(_first_number(summary, "all_first_load_times", "first_load_time")),
+        warm_load_ms=_scale_ms(_first_number(summary, "all_warm_load_times", "warm_load_time")),
+        compile_ms=_scale_ms(_first_number(summary, "all_compile_times", "compile_time")),
+        nodes_per_unit=dict(nodes_per_unit),
+        time_per_unit_us=dict(time_per_unit),
+        device_name=device.name,
+        device_os=str(device.os),
+        device_attributes=tuple(sorted(device.attributes)),
+        client_version=client_version,
+    )
+
+
+def _scale_ms(microseconds: float | None) -> float | None:
+    return microseconds / 1000.0 if microseconds is not None else None
+
+
+def remote_device_fingerprint(profile: RemoteProfile) -> DeviceFingerprint:
+    """Identify a device we do not own.
+
+    ``kind='hosted'`` because it is real physical hardware accessed as a service —
+    not a simulator, and not ours. Core count and RAM stay ``None``: AI Hub does not
+    report them, and §9.5's whole point is that a second device class falsifies fields
+    that only looked mandatory.
+    """
+    attributes = {
+        a.split(":", 1)[0]: a.split(":", 1)[1]
+        for a in profile.device_attributes
+        if ":" in a
+    }
+    chipsets = [
+        a.split(":", 1)[1] for a in profile.device_attributes if a.startswith("chipset:")
+    ]
+    soc = next(
+        (c for c in chipsets if "snapdragon" not in c),
+        chipsets[0] if chipsets else "unknown",
+    )
+    return DeviceFingerprint(
+        kind="hosted",
+        model=profile.device_name,
+        soc=soc,
+        arch=attributes.get("abi", "unknown"),
+        os_name=attributes.get("os", "unknown"),
+        os_version=profile.device_os,
+        # AI Hub does not expose the build. Saying "unknown" is the honest answer, and
+        # it matters: Stage 3 exists because an OS build changes delegate behaviour.
+        os_build="unknown",
+    )
+
+
+def remote_host_state() -> HostState:
+    """Conditions on a device we cannot inspect."""
+    return HostState(
+        power_source=PowerSource.UNKNOWN,
+        thermal_state=ThermalState.UNAVAILABLE,
+        unavailable=dict(_UNKNOWN_HOST) | {"power_source": "hosted device; not reported"},
+    )
+
+
+def remote_fallback_report(profile: RemoteProfile, intended: str) -> FallbackReport | None:
+    """Per-node compute-unit placement, as the vendor measured it.
+
+    The cross-vendor twin of our CoreML analysis. Node and time share come straight
+    from the service's own per-node report, so unlike our local path there is no
+    as-authored versus as-run ambiguity — this *is* the executed graph. FLOP share is
+    withheld: the graph AI Hub compiled is not the ONNX we submitted, so our static
+    estimate would be attributing arithmetic to nodes that no longer exist.
+    """
+    total_nodes = sum(profile.nodes_per_unit.values())
+    if not total_nodes:
+        return None
+
+    on_intended = profile.nodes_per_unit.get(intended, 0)
+    total_time = sum(profile.time_per_unit_us.values())
+    intended_time = profile.time_per_unit_us.get(intended, 0.0)
+
+    unit_names = ", ".join(
+        f"{unit}:{count}" for unit, count in sorted(profile.nodes_per_unit.items())
+    )
+    return FallbackReport(
+        intended_provider=intended,
+        nodes_total=total_nodes,
+        nodes_on_intended=on_intended,
+        fallback_node_pct=round(100.0 * (total_nodes - on_intended) / total_nodes, 4),
+        time_total_us=round(total_time, 3) or None,
+        time_on_intended_us=round(intended_time, 3) if total_time else None,
+        fallback_time_pct=(
+            round(100.0 * (total_time - intended_time) / total_time, 4) if total_time else None
+        ),
+        nodes_per_provider=dict(profile.nodes_per_unit),
+        node_basis="as_executed",
+        analysis_graph_optimization=f"qai_hub compiled ({unit_names})",
+    )
+
+
+def build_record(
+    recipe: Recipe, profile: RemoteProfile, fingerprint_id: str | None
+) -> MeasurementRecord:
+    """Turn a hosted profile into a corpus row that does not overclaim."""
+    runtime = recipe.runtime
+    assert isinstance(runtime, QaiHubRuntimeConfig)
+    stats = RunStats.from_samples(profile.timed_samples_ms)
+
+    return MeasurementRecord(
+        harness_version=HARNESS_VERSION,
+        recipe_id=recipe.recipe_id,
+        model_ref=recipe.model.ref,
+        graph_fingerprint_id=fingerprint_id,
+        device=remote_device_fingerprint(profile),
+        host_state=remote_host_state(),
+        # Their harness on their hardware. The samples are raw, so latency is a real
+        # distribution — but the conditions are not ours to vouch for.
+        measurement_source=MeasurementSource.THIRD_PARTY,
+        source_detail=(
+            f"Qualcomm AI Hub profile job {profile.job_id} ({profile.job_url}); "
+            f"qai-hub client {profile.client_version}; "
+            f"{len(profile.samples_us)} raw samples reported, first "
+            f"{REMOTE_WARMUP_SAMPLES} discarded as warmup"
+        ),
+        stress_profile=StressProfile.UNKNOWN,
+        outcome=Outcome.SUCCESS,
+        run_count=stats.n,
+        warmup_count=REMOTE_WARMUP_SAMPLES,
+        metrics=Metrics(
+            latency_ms=stats,
+            peak_rss_bytes=profile.peak_memory_bytes,
+            lowering_ms=profile.compile_ms,
+            unavailable={
+                "artifact_bytes": (
+                    "AI Hub compiles the model server-side and compile jobs are broken "
+                    "for this account, so the deployed artifact size is unknown"
+                ),
+                "power_mw": "hosted device; no power instrumentation exposed",
+                "accuracy": "tier-3 eval-set accuracy not implemented yet",
+                "output_cosine_vs_reference": (
+                    "a profile job returns timings only; use an inference job to compare outputs"
+                ),
+                "sustained_tok_s_5min": "not a generative measurement",
+                "ttft_ms": "not a generative measurement",
+                "decode_tok_s": "not a generative measurement",
+                "token_agreement": "not a generative measurement",
+            },
+        ),
+        fallback_as_run=remote_fallback_report(profile, runtime.intended_provider),
+        notes=(
+            f"cold load {profile.cold_load_ms:.1f} ms, warm load {profile.warm_load_ms:.1f} ms"
+            if profile.cold_load_ms and profile.warm_load_ms
+            else None
+        ),
+    )
+
+
+def measure_remote(
+    recipe: Recipe,
+    artifact_dir: Path,
+    *,
+    store: CorpusStore | None = None,
+    fingerprint_id: str | None = None,
+) -> MeasurementRecord:
+    """Profile one recipe on its hosted device and record the result."""
+    profile = submit_profile(recipe, artifact_dir)
+    record = build_record(recipe, profile, fingerprint_id)
+    if store is not None:
+        store.insert_recipe(recipe)
+        store.insert_measurement(record)
+    return record

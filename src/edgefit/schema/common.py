@@ -67,9 +67,16 @@ class QuantAlgorithm(StrEnum):
 
 
 class RuntimeKind(StrEnum):
-    """Layer-1 runtimes (PROJECT.md §3.1). We build on these, never compete."""
+    """Layer-1 runtimes (PROJECT.md §3.1). We build on these, never compete.
+
+    ``QAI_HUB`` is the odd one out: it is a hosted *service* rather than a runtime we
+    link against. It selects and runs the underlying runtime itself, on hardware we do
+    not own, which is precisely why it needs its own recipe variant instead of being
+    described as ONNX Runtime with a provider list we do not control.
+    """
 
     ONNXRUNTIME = "onnxruntime"
+    QAI_HUB = "qai_hub"
     EXECUTORCH = "executorch"
     LITERT = "litert"
     LLAMA_CPP = "llama_cpp"

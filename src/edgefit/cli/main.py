@@ -39,6 +39,14 @@ app = typer.Typer(
 corpus_app = typer.Typer(help="Inspect and export the measurement corpus.", no_args_is_help=True)
 app.add_typer(corpus_app, name="corpus")
 
+#: A spread across Snapdragon generations, so one command produces a comparison
+#: rather than a single number. Names must match the AI Hub catalogue exactly.
+DEFAULT_REMOTE_DEVICES = (
+    "Samsung Galaxy S23 Ultra",
+    "Samsung Galaxy S24 (Family)",
+    "Snapdragon 8 Elite QRD",
+)
+
 console = Console()
 _OK = "[green]ok[/green]"
 _FAIL = "[red]refused[/red]"
@@ -426,6 +434,76 @@ def sweep(
 
     if report.aborted_reason:
         console.print(f"\n[red]sweep aborted[/red] — {report.aborted_reason}")
+        raise typer.Exit(code=1)
+
+
+@app.command("measure-remote")
+def measure_remote_cmd(
+    model: Annotated[str, typer.Option(help="Model ref from the registry.")],
+    device: Annotated[
+        list[str] | None,
+        typer.Option(help="AI Hub device name. Repeatable. Omit for a default spread."),
+    ] = None,
+    corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
+    target_runtime: Annotated[
+        str | None, typer.Option(help="AI Hub target runtime (tflite, onnx, qnn_context_binary).")
+    ] = None,
+) -> None:
+    """Profile a model on Qualcomm AI Hub's hosted devices.
+
+    Our preflight gate does not apply here — it reasons about *our* machine, and this
+    runs in someone else's rack. Rows are recorded as third-party with an unknown
+    stress profile, because the harness and the device conditions are both theirs.
+    """
+    from edgefit.backends.artifacts import resolve_artifact  # noqa: PLC0415
+    from edgefit.harness.remote import RemoteMeasurementError, measure_remote  # noqa: PLC0415
+    from edgefit.schema.recipe import ModelRef, QaiHubRuntimeConfig, Recipe  # noqa: PLC0415
+
+    spec = resolve(model)
+    devices = device or list(DEFAULT_REMOTE_DEVICES)
+    console.print(f"[bold]{len(devices)} hosted device(s)[/bold] · {spec.hf_id}")
+
+    with console.status("resolving artifact…"):
+        artifact = resolve_artifact(
+            spec,
+            Recipe(
+                model=ModelRef(ref=spec.ref, task=spec.task),
+                runtime=QaiHubRuntimeConfig(device_name=devices[0]),
+                lowering={"static_shapes": spec.exporter != "decoder"},
+            ),
+        )
+    console.print(f"artifact           {_OK} [dim]{artifact.size_bytes / 1024**2:.1f} MiB[/dim]")
+
+    ok = 0
+    with CorpusStore(corpus) as store:
+        for name in devices:
+            recipe = Recipe(
+                model=ModelRef(ref=spec.ref, task=spec.task),
+                runtime=QaiHubRuntimeConfig(device_name=name, target_runtime=target_runtime),
+                lowering={"static_shapes": spec.exporter != "decoder"},
+            )
+            try:
+                with console.status(f"profiling on {name}… (provisioning real hardware)"):
+                    record = measure_remote(recipe, artifact.directory, store=store)
+            except RemoteMeasurementError as exc:
+                console.print(f"  [red]✗[/red] {name:<32} {str(exc)[:90]}")
+                continue
+            stats = record.metrics.latency_ms  # type: ignore[union-attr]
+            fb = record.fallback_as_run
+            placement = (
+                " · ".join(f"{u}:{n}" for u, n in sorted((fb.nodes_per_provider or {}).items()))
+                if fb
+                else "—"
+            )
+            console.print(
+                f"  [green]✓[/green] {name:<32} p50 [bold]{stats.p50:.3f}[/bold] ms "
+                f"cv {stats.cv:.1%} · n={stats.n} · {placement}"
+            )
+            ok += 1
+        total = store.count("measurements")
+
+    console.print(f"\n{ok}/{len(devices)} profiled · corpus {total} rows")
+    if ok == 0:
         raise typer.Exit(code=1)
 
 

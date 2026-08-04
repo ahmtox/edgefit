@@ -15,7 +15,7 @@ Design notes that matter later:
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -208,10 +208,54 @@ class OrtRuntimeConfig(_Frozen):
         return OrtProvider.CPU
 
 
-# One variant today. When ExecuTorch lands this becomes
-#   Annotated[OrtRuntimeConfig | ExecutorchRuntimeConfig, Field(discriminator="kind")]
-# and previously-serialised records still deserialise, because `kind` is stored.
-RuntimeConfig = OrtRuntimeConfig
+class QaiHubComputeUnit(StrEnum):
+    """Compute units a Qualcomm AI Hub job may target, in its own vocabulary."""
+
+    NPU = "npu"
+    GPU = "gpu"
+    CPU = "cpu"
+    ALL = "all"
+
+
+class QaiHubRuntimeConfig(_Frozen):
+    """A job run on Qualcomm AI Hub's hosted devices.
+
+    Deliberately not expressed as ONNX Runtime with a provider list: on AI Hub we do
+    not choose the execution provider, the service compiles and schedules the model
+    itself. Pretending otherwise would put a provider in the recipe that nothing
+    honours, and a recipe field that does not affect the run is how recipes start
+    lying.
+    """
+
+    kind: Literal[RuntimeKind.QAI_HUB] = RuntimeKind.QAI_HUB
+    device_name: str = Field(description="Device as AI Hub names it, e.g. 'Samsung Galaxy S24'")
+    device_os: str | None = Field(
+        default=None, description="Pin the OS version; AI Hub picks one when omitted."
+    )
+    target_runtime: str | None = Field(
+        default=None,
+        description=(
+            "AI Hub target runtime (tflite, onnx, qnn_context_binary). "
+            "Service default when omitted."
+        ),
+    )
+    compute_unit: QaiHubComputeUnit = Field(
+        default=QaiHubComputeUnit.ALL,
+        description="What we are hoping for. AI Hub decides; the measured split is recorded.",
+    )
+
+    @property
+    def intended_provider(self) -> str:
+        """The unit this recipe is aiming at, for the fallback report."""
+        return self.compute_unit.value.upper()
+
+
+# Discriminated on `kind`, so previously-serialised records still deserialise and
+# adding ExecuTorch later adds a variant rather than mutating the core.
+RuntimeConfig = Annotated[
+    OrtRuntimeConfig | QaiHubRuntimeConfig,
+    Field(discriminator="kind"),
+]
 
 
 class Recipe(_Frozen):
@@ -249,6 +293,11 @@ class Recipe(_Frozen):
     @property
     def intended_provider(self) -> str:
         return str(self.runtime.intended_provider)
+
+    @property
+    def is_remote(self) -> bool:
+        """True when the run happens on hardware we do not own."""
+        return self.runtime.kind is RuntimeKind.QAI_HUB
 
     def derive(self, *, label: str | None = None, **sections: object) -> Recipe:
         """A new recipe with sections deep-merged over this one.
