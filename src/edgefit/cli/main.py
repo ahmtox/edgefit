@@ -7,6 +7,7 @@ to make the uncomfortable numbers impossible to miss.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -343,6 +344,14 @@ def sweep(
     wait: Annotated[
         float, typer.Option(help="Seconds to wait for a fit host before giving up.")
     ] = 600.0,
+    log: Annotated[
+        Path | None,
+        typer.Option(
+            help="Append every event to this file as it happens. Use it for long runs: "
+            "piping the console output through a filter buffers it, so a stalled sweep "
+            "looks identical to a silent one."
+        ),
+    ] = None,
 ) -> None:
     """Measure the cross product of models and recipes.
 
@@ -371,7 +380,15 @@ def sweep(
     }
     width = max((len(c.label) for c in cells), default=10)
 
+    log_handle = log.open("a", encoding="utf-8") if log is not None else None
+
     def on_event(kind: str, cell, detail: str) -> None:
+        if log_handle is not None:
+            # Unbuffered and unfiltered, so a stalled run is distinguishable from a
+            # quiet one. Learned the hard way, twice.
+            stamp = datetime.now().strftime("%H:%M:%S")
+            log_handle.write(f"{stamp} {kind:<9} {cell.label}  {detail}\n")
+            log_handle.flush()
         if kind == "resumed":
             return  # already in the corpus; saying so for every cell is noise
         console.print(f"  {marks.get(kind, ' ')} {cell.label:<{width}}  [dim]{detail}[/dim]")
@@ -387,6 +404,8 @@ def sweep(
             on_event=on_event,
         )
         total_rows = store.count("measurements")
+    if log_handle is not None:
+        log_handle.close()
 
     summary = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
     summary.add_row("measured", f"[green]{report.measured}[/green]")

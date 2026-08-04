@@ -31,6 +31,12 @@ class UnsupportedQuantizationError(Exception):
 
 
 def variant_key(base_key: str, quant: QuantizationConfig) -> str:
+    """Key for a quantized variant.
+
+    Derived from the base key, so bumping the base exporter's version invalidates
+    every variant built from it — including their meta.json sidecars, which inherit
+    the base export's architecture facts.
+    """
     return content_hash({"base": base_key, "quant": quant.model_dump(mode="json")})
 
 

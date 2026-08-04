@@ -50,10 +50,11 @@ PROMPT = "Explain in one sentence why on-device inference is hard."
 #: Tokens greedily decoded for the reference sequence and the harness default.
 REFERENCE_TOKENS = 16
 
-#: v2 made position_ids an explicit graph input. Part of the artifact key: without
-#: it, the fixed exporter happily reuses the broken cached graph, and two
-#: measurements of two different graphs share one identity in the corpus.
-DECODER_EXPORTER_VERSION = 2
+#: Part of the artifact key, and it covers meta.json as well as the graph.
+#: v2 made position_ids an explicit graph input — without the bump, the fixed exporter
+#: would reuse the broken cached graph. v3 records the query-head count so the
+#: fingerprint can name the attention variant exactly instead of guessing.
+DECODER_EXPORTER_VERSION = 3
 
 
 class UnsupportedDecoderLowering(Exception):

@@ -30,11 +30,16 @@ from edgefit.schema.common import content_hash
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/onnx")
 DEFAULT_OPSET = 17
 
-#: Bump whenever this exporter would produce a different graph for the same inputs.
-#: It is part of the artifact key, because otherwise changing the export code
-#: silently reuses a stale cached artifact — and worse, two measurements of two
-#: different graphs end up sharing one identity in the corpus.
-EXPORTER_VERSION = 2
+#: Bump whenever this exporter would produce a different **artifact** for the same
+#: inputs — which includes meta.json, not only the graph. It is part of the artifact
+#: key, because otherwise changing the export code silently reuses a stale cached
+#: artifact, and two measurements of two different artifacts end up sharing one
+#: identity in the corpus.
+#:
+#: v3 records head and layer counts in meta.json. Missing this bump left dynamic-shape
+#: and quantized artifacts carrying pre-fix sidecars, so the same model fingerprinted
+#: as both `mha` and `unknown` depending on which artifact a row happened to use.
+EXPORTER_VERSION = 3
 
 #: Files the harness writes alongside the model; not part of the shipped artifact.
 HARNESS_SIDECARS = frozenset({"inputs.npz", "reference.npz", "meta.json"})

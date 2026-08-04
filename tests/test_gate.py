@@ -345,3 +345,72 @@ class TestDeviceLock:
         finally:
             release.set()
             holder.join(timeout=30)
+
+
+class TestWaitUntilFitTerminates:
+    """wait_until_fit must always return, and must respect its own deadline.
+
+    A sweep was once observed asleep in this function 994s into a 900s budget while
+    the host was demonstrably fit from outside the process. The cause was never
+    established — the diagnostic output had been filtered away — so these tests pin
+    the contract instead of the explanation.
+    """
+
+    def test_returns_immediately_when_the_host_is_fit(
+        self, monkeypatch, device
+    ) -> None:
+        from edgefit.harness import gate as gate_module
+
+        monkeypatch.setattr(gate_module, "probe_device", lambda: device, raising=False)
+        monkeypatch.setattr(
+            gate_module, "current_gate", lambda *a, **k: evaluate_gate(_state())
+        )
+        started = time.monotonic()
+        report = gate_module.wait_until_fit(timeout_s=30, poll_s=5, device=device)
+        assert report.passed
+        assert time.monotonic() - started < 1.0, "a fit host must not be slept on"
+
+    def test_gives_up_at_the_deadline(self, monkeypatch, device) -> None:
+        """The property that failed in the field: it must stop waiting."""
+        from edgefit.harness import gate as gate_module
+
+        unfit = evaluate_gate(_state(thermal_state=ThermalState.SERIOUS))
+        monkeypatch.setattr(gate_module, "current_gate", lambda *a, **k: unfit)
+
+        started = time.monotonic()
+        report = gate_module.wait_until_fit(timeout_s=0.6, poll_s=0.2, device=device)
+        elapsed = time.monotonic() - started
+
+        assert not report.passed, "an unfit host must be reported as unfit, not waited out"
+        assert elapsed < 5.0, f"waited {elapsed:.1f}s against a 0.6s budget"
+
+    def test_a_zero_budget_polls_once_and_returns(self, monkeypatch, device) -> None:
+        from edgefit.harness import gate as gate_module
+
+        calls: list[int] = []
+
+        def once(*args, **kwargs):
+            calls.append(1)
+            return evaluate_gate(_state(thermal_state=ThermalState.SERIOUS))
+
+        monkeypatch.setattr(gate_module, "current_gate", once)
+        report = gate_module.wait_until_fit(timeout_s=0.0, poll_s=10, device=device)
+        assert not report.passed
+        assert len(calls) == 1, "must not sleep when there is no budget to wait"
+
+    def test_reports_progress_while_waiting(self, monkeypatch, device) -> None:
+        """The callback exists so an operator can see *why* it is waiting."""
+        from edgefit.harness import gate as gate_module
+
+        monkeypatch.setattr(
+            gate_module,
+            "current_gate",
+            lambda *a, **k: evaluate_gate(_state(thermal_state=ThermalState.SERIOUS)),
+        )
+        seen: list[str] = []
+        gate_module.wait_until_fit(
+            timeout_s=0.4, poll_s=0.15, device=device,
+            on_wait=lambda rep, left: seen.append(rep.reason()),
+        )
+        assert seen, "an operator must be told why the wait is happening"
+        assert "thermal state" in seen[0]
