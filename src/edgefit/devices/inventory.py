@@ -168,9 +168,12 @@ def qai_hub_inventory(
 QAI_HUB_BLOCKED = (
     "Qualcomm AI Hub lists these devices for this account but will not provision any "
     "of them: every compile submission is rejected with 'No devices match the given OS "
-    "name, version, and attributes', across all 31 catalogued SoCs. Authentication and "
-    "model upload both succeed, so this is a device-access entitlement on Qualcomm's "
-    "side, not a credential or client problem."
+    "name, version, and attributes'. Ruled out: device-spec form (4 variants), device "
+    "generation (8 devices, Snapdragon 845 through 8 Elite), API endpoint (workbench "
+    "and app), and project scoping. Authentication, uploads and all reads succeed, and "
+    "the rejected device record is byte-identical to the one the server returned — so "
+    "this is an account entitlement on Qualcomm's side. Organisation tier is "
+    "'Community'. Full diagnosis: docs/qai-hub-device-access.md"
 )
 
 
