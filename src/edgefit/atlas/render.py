@@ -273,7 +273,9 @@ def model_page(model: Model, depth: int = 1) -> str:
 
     fingerprint = []
     if model.n_parameters:
-        fingerprint.append(f"{model.n_parameters / 1e6:.1f}M parameters")
+        # "As exported" matters: an export can materialise a tied embedding twice, so
+        # the graph legitimately holds more parameters than the model card states.
+        fingerprint.append(f"{model.n_parameters / 1e6:.1f}M graph parameters (as exported)")
     if model.n_nodes:
         fingerprint.append(f"{model.n_nodes} graph nodes")
     if model.attention_variant and model.attention_variant != "unknown":
@@ -816,6 +818,40 @@ speedup — &ldquo;int8 is twice as fast&rdquo; with no cost column is a half-tr
 fail badly on the one slice a customer cares about. Real eval-set accuracy is a
 separate tier that is not built yet, and the field is null with that reason attached
 rather than filled in with this number.</p>
+
+<h3 id="graph-parameters">Graph parameters are counted as exported</h3>
+<p>Parameter counts here are the initializers in the exported ONNX graph, which is not
+always the number on the model card. Llama-3.2-1B reports <strong>1498.5M</strong>
+against a card value near 1236M, and the 262.5M difference is exactly one embedding
+matrix (128256 &times; 2048): <code>torch.onnx.export</code> un-ties the tied
+embedding, materialising it once as <code>embed_tokens.weight</code> and again as the
+output projection's weight.</p>
+<p>That is a real property of the artifact, not a measurement error — those bytes are
+in the file and a deployment pipeline moves them. In fp32 it is about
+<strong>1.05 GB of the 5.6 GB artifact</strong>, roughly a fifth of it, spent on a
+duplicate. We report the count as exported rather than the card value because the
+former is what ships.</p>
+
+<h3 id="generative">Generative models report two phases, never one average</h3>
+<p>A decoder has no single latency. Prefill consumes the whole prompt in one
+compute-bound pass and yields <strong>time to first token</strong>; decode then emits
+one token at a time, bound by memory bandwidth as it re-reads the KV cache and the
+weights. We report both distributions separately and never average them, because the
+average describes neither phase — and that average is the figure most often quoted.</p>
+<p>The KV cache is threaded explicitly through the graph: each step feeds the previous
+step&rsquo;s <code>present</code> tensors back in as <code>past</code>. Without it every
+step would reprocess the whole sequence, decode cost would grow quadratically, and any
+tokens-per-second figure would be fiction.</p>
+<p><strong>Quality is exact token agreement</strong>, not a float tolerance. Greedy
+decoding through the exported graph must reproduce the identical token sequence to
+fp32 PyTorch. That check earned its place immediately: our first working export scored
+25% because <code>position_ids</code> was not an explicit graph input, so the tracer
+baked prefill&rsquo;s rotary positions in and every decode step computed them at the
+wrong offset. The text stayed fluent; it was simply different text. Every tolerance on
+logits would have passed it.</p>
+<p><code>sustained_tok_s_5min</code> is null everywhere. Sustained throughput is a
+thermal-soak measurement belonging to the stress bench, and a thirty-second stand-in
+would misrepresent it.</p>
 
 <h3 id="memory">Peak memory</h3>
 <p>Each measurement runs in a fresh child process which reports its own peak resident
