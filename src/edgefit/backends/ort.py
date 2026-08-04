@@ -35,7 +35,7 @@ from edgefit.backends.analysis.graph import fingerprint_onnx
 from edgefit.backends.base import DeviceRun, StaticAnalysis
 from edgefit.harness.memory import peak_rss_bytes
 from edgefit.schema.common import RuntimeKind
-from edgefit.schema.config import ConfigRecord, GraphOptLevel, OrtProvider
+from edgefit.schema.recipe import GraphOptLevel, OrtProvider, Recipe
 
 _OPT_LEVEL = {
     GraphOptLevel.DISABLED: ort.GraphOptimizationLevel.ORT_DISABLE_ALL,
@@ -54,9 +54,9 @@ class OrtBackend:
 
     # -- session construction ---------------------------------------------
 
-    def _provider_spec(self, config: ConfigRecord) -> list[tuple[str, dict[str, str]]]:
+    def _provider_spec(self, recipe: Recipe) -> list[tuple[str, dict[str, str]]]:
         """Providers with their options, in ORT's priority order."""
-        runtime = config.runtime
+        runtime = recipe.runtime
         spec: list[tuple[str, dict[str, str]]] = []
         for provider in runtime.providers:
             options: dict[str, str] = {}
@@ -77,18 +77,18 @@ class OrtBackend:
         return spec
 
     def _session_options(
-        self, config: ConfigRecord, *, opt_level: GraphOptLevel, profile_prefix: str | None
+        self, recipe: Recipe, *, opt_level: GraphOptLevel, profile_prefix: str | None
     ) -> ort.SessionOptions:
         options = ort.SessionOptions()
         options.graph_optimization_level = _OPT_LEVEL[opt_level]
 
-        if config.execution.num_threads is not None:
-            options.intra_op_num_threads = config.execution.num_threads
-        if config.runtime.inter_op_num_threads is not None:
-            options.inter_op_num_threads = config.runtime.inter_op_num_threads
+        if recipe.execution.num_threads is not None:
+            options.intra_op_num_threads = recipe.execution.num_threads
+        if recipe.runtime.inter_op_num_threads is not None:
+            options.inter_op_num_threads = recipe.runtime.inter_op_num_threads
         options.execution_mode = (
             ort.ExecutionMode.ORT_PARALLEL
-            if config.runtime.parallel_execution
+            if recipe.runtime.parallel_execution
             else ort.ExecutionMode.ORT_SEQUENTIAL
         )
         if profile_prefix is not None:
@@ -99,22 +99,22 @@ class OrtBackend:
     def _create_session(
         self,
         model_path: Path,
-        config: ConfigRecord,
+        recipe: Recipe,
         *,
         opt_level: GraphOptLevel,
         profile_prefix: str | None = None,
     ) -> ort.InferenceSession:
-        providers = self._provider_spec(config)
+        providers = self._provider_spec(recipe)
         return ort.InferenceSession(
             str(model_path),
-            self._session_options(config, opt_level=opt_level, profile_prefix=profile_prefix),
+            self._session_options(recipe, opt_level=opt_level, profile_prefix=profile_prefix),
             providers=[name for name, _ in providers],
             provider_options=[options for _, options in providers],
         )
 
     # -- tier 1: static analysis ------------------------------------------
 
-    def analyze(self, artifact_dir: Path, config: ConfigRecord) -> StaticAnalysis:
+    def analyze(self, artifact_dir: Path, recipe: Recipe) -> StaticAnalysis:
         """Lower, fingerprint, and determine what the partitioner actually claimed."""
         model_path = artifact_dir / "model.onnx"
         artifact_bytes = sum(p.stat().st_size for p in artifact_dir.glob("*.onnx*"))
@@ -140,7 +140,7 @@ class OrtBackend:
             try:
                 session = self._create_session(
                     model_path,
-                    config,
+                    recipe,
                     opt_level=GraphOptLevel.DISABLED,
                     profile_prefix=prefix,
                 )
@@ -175,7 +175,7 @@ class OrtBackend:
         fallback = build_fallback_report(
             model,
             events,
-            intended_provider=config.intended_provider,
+            intended_provider=recipe.intended_provider,
             flops=flops,
             runs=1,
         )
@@ -184,7 +184,7 @@ class OrtBackend:
                 "analysis_graph_optimization": _ANALYSIS_OPT_LEVEL,
                 "flops_estimator_version": FLOPS_ESTIMATOR_VERSION if flops.is_complete else None,
                 "partition_count": fallback.nodes_per_provider.get(
-                    config.intended_provider + " (fused partitions)"
+                    recipe.intended_provider + " (fused partitions)"
                 ),
             }
         )
@@ -200,12 +200,12 @@ class OrtBackend:
     # -- tier 2: device measurement ---------------------------------------
 
     def measure(
-        self, artifact_dir: Path, config: ConfigRecord, runs: int, warmup: int
+        self, artifact_dir: Path, recipe: Recipe, runs: int, warmup: int
     ) -> DeviceRun:
         """Timed runs at the configured optimisation level.
 
         Runs inside the measurement subprocess, so ``peak_rss_bytes`` here is this
-        process's own high-water mark and is attributable to this config alone.
+        process's own high-water mark and is attributable to this recipe alone.
         """
         model_path = artifact_dir / "model.onnx"
         with np.load(artifact_dir / "inputs.npz") as data:
@@ -213,7 +213,7 @@ class OrtBackend:
 
         try:
             session = self._create_session(
-                model_path, config, opt_level=config.runtime.graph_optimization_level
+                model_path, recipe, opt_level=recipe.runtime.graph_optimization_level
             )
         except Exception as exc:  # noqa: BLE001
             return DeviceRun(failure_reason=f"session creation failed: {exc}")

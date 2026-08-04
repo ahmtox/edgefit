@@ -22,9 +22,9 @@ import duckdb
 
 from edgefit.corpus.ddl import DDL
 from edgefit.schema.common import canonical_json
-from edgefit.schema.config import ConfigRecord
 from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.measurement import MeasurementRecord
+from edgefit.schema.recipe import Recipe
 
 DEFAULT_CORPUS_PATH = Path("corpus/measurements.duckdb")
 
@@ -77,46 +77,46 @@ class CorpusStore:
 
     # -- writes (insert only) ---------------------------------------------
 
-    def insert_config(self, config: ConfigRecord) -> str:
-        """Idempotent: re-inserting an identical config is a no-op, not an error.
+    def insert_recipe(self, recipe: Recipe) -> str:
+        """Idempotent: re-inserting an identical recipe is a no-op, not an error.
 
-        Configs are pure descriptions, so the same point in the search space
+        Recipes are pure descriptions, so the same point in the search space
         legitimately recurs across jobs. Measurements are observations and are
         held to a stricter rule.
         """
-        config_id = config.config_id
-        if self._exists("configs", "config_id", config_id):
-            return config_id
+        recipe_id = recipe.recipe_id
+        if self._exists("recipes", "recipe_id", recipe_id):
+            return recipe_id
 
-        quant = config.quantization
+        quant = recipe.quantization
         self._conn.execute(
             """
-            INSERT INTO configs VALUES (
-                $config_id, $schema_version, $model_ref, $task, $runtime_kind,
+            INSERT INTO recipes VALUES (
+                $recipe_id, $schema_version, $model_ref, $task, $runtime_kind,
                 $intended_provider, $providers, $weight_dtype, $weight_granularity,
                 $activation_quant, $quant_algorithm, $num_threads, $label,
                 $payload, $first_seen_at
             )
             """,
             {
-                "config_id": config_id,
-                "schema_version": config.schema_version,
-                "model_ref": config.model.ref,
-                "task": str(config.model.task),
-                "runtime_kind": str(config.runtime.kind),
-                "intended_provider": config.intended_provider,
-                "providers": ",".join(str(p) for p in config.runtime.providers),
+                "recipe_id": recipe_id,
+                "schema_version": recipe.schema_version,
+                "model_ref": recipe.model.ref,
+                "task": str(recipe.model.task),
+                "runtime_kind": str(recipe.runtime.kind),
+                "intended_provider": recipe.intended_provider,
+                "providers": ",".join(str(p) for p in recipe.runtime.providers),
                 "weight_dtype": str(quant.weight_dtype) if quant else None,
                 "weight_granularity": str(quant.weight_granularity) if quant else None,
                 "activation_quant": str(quant.activation_quant) if quant else None,
                 "quant_algorithm": str(quant.algorithm) if quant and quant.algorithm else None,
-                "num_threads": config.execution.num_threads,
-                "label": config.label,
-                "payload": canonical_json(config.model_dump(mode="json")),
+                "num_threads": recipe.execution.num_threads,
+                "label": recipe.label,
+                "payload": canonical_json(recipe.model_dump(mode="json")),
                 "first_seen_at": datetime.now(UTC),
             },
         )
-        return config_id
+        return recipe_id
 
     def insert_fingerprint(self, fingerprint: GraphFingerprint) -> str:
         fingerprint_id = fingerprint.fingerprint_id
@@ -162,7 +162,7 @@ class CorpusStore:
             """
             INSERT INTO measurements VALUES (
                 $measurement_id, $schema_version, $harness_version, $created_at,
-                $config_id, $model_ref, $graph_fingerprint_id,
+                $recipe_id, $model_ref, $graph_fingerprint_id,
                 $device_id, $sku_id, $device_model, $soc, $os_name, $os_version, $os_build,
                 $stress_profile, $outcome, $failure_reason, $run_count, $warmup_count,
                 $latency_p50_ms, $latency_p95_ms, $latency_cv,
@@ -179,7 +179,7 @@ class CorpusStore:
                 "schema_version": record.schema_version,
                 "harness_version": record.harness_version,
                 "created_at": record.created_at,
-                "config_id": record.config_id,
+                "recipe_id": record.recipe_id,
                 "model_ref": record.model_ref,
                 "graph_fingerprint_id": record.graph_fingerprint_id,
                 "device_id": record.device.device_id,
@@ -241,14 +241,14 @@ class CorpusStore:
         ).fetchone()
         return MeasurementRecord.model_validate_json(row[0]) if row else None
 
-    def get_config(self, config_id: str) -> ConfigRecord | None:
+    def get_recipe(self, recipe_id: str) -> Recipe | None:
         row = self._conn.execute(
-            "SELECT payload FROM configs WHERE config_id = $id", {"id": config_id}
+            "SELECT payload FROM recipes WHERE recipe_id = $id", {"id": recipe_id}
         ).fetchone()
-        return ConfigRecord.model_validate_json(row[0]) if row else None
+        return Recipe.model_validate_json(row[0]) if row else None
 
     def count(self, table: str = "measurements") -> int:
-        if table not in {"measurements", "configs", "graph_fingerprints"}:
+        if table not in {"measurements", "recipes", "graph_fingerprints"}:
             raise ValueError(f"unknown table {table!r}")
         row = self._conn.execute(f"SELECT count(*) FROM {table}").fetchone()  # noqa: S608
         return int(row[0]) if row else 0

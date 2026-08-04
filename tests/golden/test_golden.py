@@ -113,7 +113,7 @@ def corpus(tmp_path_factory) -> CorpusStore:
 @pytest.fixture(scope="session")
 def results(fit_host, host_class_matches, artifacts, corpus) -> dict[str, object]:
     """Run every fixture once and share the outcomes across assertions."""
-    from edgefit.cli.configs import load_config
+    from edgefit.cli.recipes import load_recipe
 
     # When running on a busy host the gate would refuse every fixture, so the
     # thresholds are relaxed *for the run itself* while the timing assertions
@@ -133,10 +133,10 @@ def results(fit_host, host_class_matches, artifacts, corpus) -> dict[str, object
 
     outcomes = {}
     for fixture in FIXTURES["fixtures"]:
-        config = load_config(fixture["config"], fixture["model"])
+        recipe = load_recipe(fixture["recipe"], fixture["model"])
         outcomes[fixture["id"]] = measure(
             artifacts[fixture["model"]],
-            config,
+            recipe,
             store=corpus,
             policy=MeasurementPolicy(runs=10, warmup=3),
             thresholds=thresholds,

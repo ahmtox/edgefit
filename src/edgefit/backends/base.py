@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from edgefit.schema.common import RuntimeKind
-from edgefit.schema.config import ConfigRecord
 from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.measurement import FallbackReport
+from edgefit.schema.recipe import Recipe
 
 
 @dataclass(frozen=True)
@@ -63,12 +63,12 @@ class Backend(Protocol):
 
     kind: RuntimeKind
 
-    def analyze(self, artifact_dir: Path, config: ConfigRecord) -> StaticAnalysis:
+    def analyze(self, artifact_dir: Path, recipe: Recipe) -> StaticAnalysis:
         """Tier 1: lower, inspect, and report the partition decision."""
         ...
 
     def measure(
-        self, artifact_dir: Path, config: ConfigRecord, runs: int, warmup: int
+        self, artifact_dir: Path, recipe: Recipe, runs: int, warmup: int
     ) -> DeviceRun:
         """Tier 2: timed runs on real hardware. Called inside the measurement subprocess."""
         ...

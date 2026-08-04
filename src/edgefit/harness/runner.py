@@ -36,10 +36,10 @@ from edgefit.harness.gate import (
 )
 from edgefit.harness.hostinfo import probe_device, probe_state
 from edgefit.harness.timing import MeasurementPolicy, aggregate, is_noisy
-from edgefit.schema.config import ConfigRecord
 from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.host import DeviceFingerprint
 from edgefit.schema.measurement import FallbackReport, MeasurementRecord, Metrics, Outcome
+from edgefit.schema.recipe import Recipe
 
 _WORKER_TIMEOUT_S = 900.0
 _SIGNALS = {member.value for member in signal.Signals}
@@ -112,13 +112,13 @@ def _run_worker(job: dict, timeout_s: float = _WORKER_TIMEOUT_S) -> dict:
         }
 
 
-def _analyze_in_subprocess(artifact_dir: Path, config: ConfigRecord) -> StaticAnalysis:
+def _analyze_in_subprocess(artifact_dir: Path, recipe: Recipe) -> StaticAnalysis:
     """Tier 1, isolated. Partitioning is where delegates crash hardest."""
     payload = _run_worker(
         {
             "mode": "analyze",
             "artifact_dir": str(artifact_dir),
-            "config": config.model_dump(mode="json"),
+            "recipe": recipe.model_dump(mode="json"),
         }
     )
     if payload.get("lowered") is not True:
@@ -144,14 +144,14 @@ def _analyze_in_subprocess(artifact_dir: Path, config: ConfigRecord) -> StaticAn
 
 
 def _measure_in_subprocess(
-    artifact_dir: Path, config: ConfigRecord, policy: MeasurementPolicy
+    artifact_dir: Path, recipe: Recipe, policy: MeasurementPolicy
 ) -> DeviceRun:
     """Tier 2, isolated. See ``worker`` for why this is not optional."""
     payload = _run_worker(
         {
             "mode": "measure",
             "artifact_dir": str(artifact_dir),
-            "config": config.model_dump(mode="json"),
+            "recipe": recipe.model_dump(mode="json"),
             "runs": policy.runs,
             "warmup": policy.warmup,
         }
@@ -166,7 +166,7 @@ def _measure_in_subprocess(
 
 
 def _failure_record(
-    config: ConfigRecord,
+    recipe: Recipe,
     device: DeviceFingerprint,
     gate: GateReport,
     outcome: Outcome,
@@ -184,8 +184,8 @@ def _failure_record(
         )
     return MeasurementRecord(
         harness_version=HARNESS_VERSION,
-        config_id=config.config_id,
-        model_ref=config.model.ref,
+        recipe_id=recipe.recipe_id,
+        model_ref=recipe.model.ref,
         graph_fingerprint_id=(
             analysis.fingerprint.fingerprint_id
             if analysis and analysis.fingerprint
@@ -205,7 +205,7 @@ def _failure_record(
 
 def measure(
     artifact_dir: Path,
-    config: ConfigRecord,
+    recipe: Recipe,
     *,
     store: CorpusStore | None = None,
     policy: MeasurementPolicy | None = None,
@@ -213,7 +213,7 @@ def measure(
     lock_timeout_s: float = 0.0,
     calibrate: bool = True,
 ) -> MeasurementOutcome:
-    """Measure one (config, device) pair. Always produces a record."""
+    """Measure one (recipe, device) pair. Always produces a record."""
     policy = policy or MeasurementPolicy()
     device = probe_device()
     baselines = BaselineStore()
@@ -224,10 +224,10 @@ def measure(
 
         if not gate.passed:
             record = _failure_record(
-                config, device, gate, Outcome.GATE_REFUSED, gate.reason()
+                recipe, device, gate, Outcome.GATE_REFUSED, gate.reason()
             )
             if store is not None:
-                store.insert_config(config)
+                store.insert_recipe(recipe)
                 store.insert_measurement(record)
             return MeasurementOutcome(record=record, gate=gate)
 
@@ -236,10 +236,10 @@ def measure(
             baselines.record(device, probe.elapsed_ms)
 
         # --- tier 1: static ---
-        analysis = _analyze_in_subprocess(artifact_dir, config)
+        analysis = _analyze_in_subprocess(artifact_dir, recipe)
         if not analysis.lowered:
             record = _failure_record(
-                config,
+                recipe,
                 device,
                 gate,
                 Outcome.LOWERING_FAILURE,
@@ -247,18 +247,18 @@ def measure(
                 analysis=analysis,
             )
             if store is not None:
-                store.insert_config(config)
+                store.insert_recipe(recipe)
                 if analysis.fingerprint:
                     store.insert_fingerprint(analysis.fingerprint)
                 store.insert_measurement(record)
             return MeasurementOutcome(record=record, analysis=analysis, gate=gate)
 
         # --- tier 2: device ---
-        run = _measure_in_subprocess(artifact_dir, config, policy)
+        run = _measure_in_subprocess(artifact_dir, recipe, policy)
 
     if not run.succeeded:
         record = _failure_record(
-            config,
+            recipe,
             device,
             gate,
             Outcome.RUNTIME_FAILURE,
@@ -276,8 +276,8 @@ def measure(
             )
         record = MeasurementRecord(
             harness_version=HARNESS_VERSION,
-            config_id=config.config_id,
-            model_ref=config.model.ref,
+            recipe_id=recipe.recipe_id,
+            model_ref=recipe.model.ref,
             graph_fingerprint_id=(
                 analysis.fingerprint.fingerprint_id if analysis.fingerprint else None
             ),
@@ -299,7 +299,7 @@ def measure(
         )
 
     if store is not None:
-        store.insert_config(config)
+        store.insert_recipe(recipe)
         if analysis.fingerprint:
             store.insert_fingerprint(analysis.fingerprint)
         store.insert_measurement(record)

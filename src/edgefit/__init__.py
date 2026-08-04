@@ -1,6 +1,6 @@
 """EdgeFit — deployment compiler for on-device AI.
 
-Pass 1 is the measurement harness: ``(model, config, device) -> measurement``.
+Pass 1 is the measurement harness: ``(model, recipe, device) -> measurement``.
 """
 
 __version__ = "0.0.1"

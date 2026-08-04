@@ -15,7 +15,7 @@ from rich.console import Console
 from rich.table import Table
 
 from edgefit import HARNESS_VERSION, __version__
-from edgefit.cli.configs import available_configs, load_config
+from edgefit.cli.recipes import available_recipes, load_recipe
 from edgefit.corpus.store import DEFAULT_CORPUS_PATH, CorpusStore
 from edgefit.harness.gate import BaselineStore, GateThresholds, evaluate_gate, run_calibration_probe
 from edgefit.harness.hostinfo import probe_device, probe_state
@@ -62,18 +62,18 @@ def models() -> None:
 
 
 @app.command()
-def configs() -> None:
-    """List available config presets."""
-    table = Table(title="Configs", header_style="bold")
+def recipes() -> None:
+    """List available recipe presets."""
+    table = Table(title="Recipe library", header_style="bold")
     table.add_column("file")
     table.add_column("label")
     table.add_column("providers", overflow="fold")
-    for path in available_configs():
-        config = load_config(path, known_refs()[0])
+    for path in available_recipes():
+        recipe = load_recipe(path, known_refs()[0])
         table.add_row(
             str(path),
-            config.label or "—",
-            " > ".join(str(p) for p in config.runtime.providers),
+            recipe.label or "—",
+            " > ".join(str(p) for p in recipe.runtime.providers),
         )
     console.print(table)
 
@@ -161,7 +161,7 @@ def export(
 @app.command()
 def measure(
     model: Annotated[str, typer.Option(help="Model ref from the registry.")],
-    config: Annotated[Path, typer.Option(help="Path to a config YAML.")],
+    recipe: Annotated[Path, typer.Option(help="Path to a recipe YAML.")],
     runs: Annotated[int, typer.Option(help="Timed runs. Minimum 5 (PROJECT.md §14.2).")] = 10,
     warmup: Annotated[int, typer.Option(help="Discarded warmup runs.")] = 3,
     dynamic: Annotated[bool, typer.Option(help="Use the dynamic-shape artifact.")] = False,
@@ -171,11 +171,11 @@ def measure(
                            "still recorded, and still not publishable.")
     ] = False,
 ) -> None:
-    """Measure one (model, config) pair on this device and record the result."""
+    """Measure one (model, recipe) pair on this device and record the result."""
     from edgefit.backends.export_onnx import export_onnx  # noqa: PLC0415
 
     spec = resolve(model)
-    record_config = load_config(config, model)
+    record_recipe = load_recipe(recipe, model)
 
     with console.status("resolving artifact…"):
         artifact = export_onnx(spec, static_shapes=not dynamic)
@@ -199,7 +199,7 @@ def measure(
     with CorpusStore(corpus) as store, console.status("measuring…"):
         outcome = run_measurement(
             artifact.directory,
-            record_config,
+            record_recipe,
             store=store,
             policy=MeasurementPolicy(runs=runs, warmup=warmup),
             thresholds=thresholds,
@@ -283,7 +283,7 @@ def corpus_list(
             """
             SELECT m.created_at, m.model_ref, c.intended_provider, m.outcome,
                    m.latency_p50_ms, m.latency_cv, m.fallback_flops_pct, m.peak_rss_bytes
-            FROM measurements m LEFT JOIN configs c USING (config_id)
+            FROM measurements m LEFT JOIN recipes c USING (recipe_id)
             ORDER BY m.created_at DESC LIMIT $limit
             """,
             {"limit": limit},

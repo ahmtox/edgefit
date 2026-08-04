@@ -14,7 +14,7 @@ first. See [docs/PROJECT.md](docs/PROJECT.md) for the product, and
 
 ## What works today
 
-`(model, config, device) → measurement`, on ONNX Runtime with CPU and CoreML
+`(model, recipe, device) → measurement`, on ONNX Runtime with CPU and CoreML
 execution providers, with the result written immutably to a local corpus.
 
 ```bash
@@ -23,7 +23,7 @@ uv sync --extra export --group dev
 uv run edgefit doctor        # is this host fit to measure on?
 uv run edgefit models        # what subjects are registered
 uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 \
-                       --config configs/ort_coreml_fp32.yaml
+                       --recipe recipes/ort_coreml_fp32.yaml
 uv run edgefit corpus list
 uv run edgefit corpus export # Parquet + CSV
 uv run edgefit verify        # golden fixtures — the gate for everything after
@@ -64,7 +64,7 @@ rather than produce a plausible wrong answer:
 
 ```
 src/edgefit/
-  schema/     config, measurement, fingerprint, host records
+  schema/     recipe, measurement, fingerprint, host records
   corpus/     insert-only DuckDB store + Parquet export
   harness/    host probes, preflight gate, run protocol, subprocess workers
   backends/   ONNX Runtime; graph/FLOP/EP-placement analysis

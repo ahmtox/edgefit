@@ -142,7 +142,7 @@ def content_hash(payload: Any, *, length: int = 16) -> str:
     """Stable short digest of a record's canonical form.
 
     Content addressing is what makes the corpus insert-only workable: the same
-    config always lands on the same id, so a duplicate insert is detectable
+    recipe always lands on the same id, so a duplicate insert is detectable
     rather than silently creating a second row.
     """
     digest = hashlib.blake2b(canonical_json(payload).encode("utf-8"), digest_size=32)

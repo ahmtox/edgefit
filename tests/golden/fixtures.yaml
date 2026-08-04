@@ -34,7 +34,7 @@ numerics:
 fixtures:
   - id: minilm-cpu-fp32
     model: hf:sentence-transformers/all-MiniLM-L6-v2
-    config: configs/ort_cpu_fp32.yaml
+    recipe: recipes/ort_cpu_fp32.yaml
     expect:
       outcome: success
       latency_p50_ms: {min: 2.0, max: 120.0}
@@ -45,7 +45,7 @@ fixtures:
 
   - id: minilm-coreml-fp32
     model: hf:sentence-transformers/all-MiniLM-L6-v2
-    config: configs/ort_coreml_fp32.yaml
+    recipe: recipes/ort_coreml_fp32.yaml
     expect:
       outcome: success
       latency_p50_ms: {min: 2.0, max: 400.0}
@@ -59,7 +59,7 @@ fixtures:
 
   - id: minilm-coreml-mlprogram-crashes
     model: hf:sentence-transformers/all-MiniLM-L6-v2
-    config: configs/ort_coreml_mlprogram.yaml
+    recipe: recipes/ort_coreml_mlprogram.yaml
     expect:
       # A known delegate-level abort. Pinned so that (a) the harness keeps
       # surviving it and (b) we notice the day ORT fixes it.

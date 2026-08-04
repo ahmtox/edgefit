@@ -28,7 +28,7 @@ def peak_rss_bytes() -> int:
 
     Deliberately self-scoped. The parent must not read ``RUSAGE_CHILDREN``: that
     is a running maximum over every child that has ever exited, so it would
-    attribute a heavy config's memory to every lighter config measured after it.
+    attribute a heavy recipe's memory to every lighter recipe measured after it.
     Each measurement subprocess reports its own figure instead.
     """
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * _MAXRSS_SCALE

@@ -238,13 +238,13 @@ class Metrics(_Frozen):
 
 
 class MeasurementRecord(_Frozen):
-    """One (config, device) measurement. Immutable; never updated in place."""
+    """One (recipe, device) measurement. Immutable; never updated in place."""
 
     schema_version: int = MEASUREMENT_SCHEMA_VERSION
     harness_version: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    config_id: str
+    recipe_id: str
     model_ref: str
     graph_fingerprint_id: str | None = None
 
@@ -295,7 +295,7 @@ class MeasurementRecord(_Frozen):
     def measurement_id(self) -> str:
         """Content hash including ``created_at``.
 
-        Repeat measurements of the same config on the same device are genuinely
+        Repeat measurements of the same recipe on the same device are genuinely
         different observations and must not collapse onto one id — repeatability
         data is exactly what the two-unit and drift checks consume.
         """

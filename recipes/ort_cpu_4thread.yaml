@@ -1,0 +1,6 @@
+# Thread count is a real axis on a 4P+4E machine: oversubscribing the efficiency
+# cores costs more than it buys.
+extends: ort_cpu_fp32.yaml
+label: ort-cpu-4thread
+execution:
+  num_threads: 4

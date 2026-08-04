@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 
 from edgefit.schema import (
-    ConfigRecord,
     DeviceFingerprint,
     HostState,
     ModelRef,
     OrtProvider,
     OrtRuntimeConfig,
     PowerSource,
+    Recipe,
     TaskType,
     ThermalState,
 )
@@ -51,16 +51,16 @@ def host_state() -> HostState:
 
 
 @pytest.fixture
-def cpu_config() -> ConfigRecord:
-    return ConfigRecord(
+def cpu_recipe() -> Recipe:
+    return Recipe(
         model=ModelRef(ref=MINILM, task=TaskType.EMBED),
         runtime=OrtRuntimeConfig(providers=(OrtProvider.CPU,)),
     )
 
 
 @pytest.fixture
-def coreml_config() -> ConfigRecord:
-    return ConfigRecord(
+def coreml_recipe() -> Recipe:
+    return Recipe(
         model=ModelRef(ref=MINILM, task=TaskType.EMBED),
         runtime=OrtRuntimeConfig(providers=(OrtProvider.COREML, OrtProvider.CPU)),
     )

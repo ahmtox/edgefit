@@ -16,20 +16,6 @@ from edgefit.schema.common import (
     canonical_json,
     content_hash,
 )
-from edgefit.schema.config import (
-    CONFIG_SCHEMA_VERSION,
-    CalibrationConfig,
-    ConfigRecord,
-    CoreMLComputeUnits,
-    ExecutionConfig,
-    GraphOptLevel,
-    ModelRef,
-    OrtProvider,
-    OrtRuntimeConfig,
-    PartitionConfig,
-    QuantizationConfig,
-    RuntimeConfig,
-)
 from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.host import DeviceFingerprint, HostState
 from edgefit.schema.measurement import (
@@ -41,16 +27,30 @@ from edgefit.schema.measurement import (
     Metrics,
     RunStats,
 )
+from edgefit.schema.recipe import (
+    RECIPE_SCHEMA_VERSION,
+    CalibrationConfig,
+    CoreMLComputeUnits,
+    ExecutionConfig,
+    GraphOptLevel,
+    ModelRef,
+    OrtProvider,
+    OrtRuntimeConfig,
+    PartitionConfig,
+    QuantizationConfig,
+    Recipe,
+    RuntimeConfig,
+)
 
 __all__ = [
-    "CONFIG_SCHEMA_VERSION",
+    "RECIPE_SCHEMA_VERSION",
     "MEASUREMENT_SCHEMA_VERSION",
     "MIN_RUNS",
     "ActivationQuant",
     "AttentionVariant",
     "CalibrationConfig",
     "CalibrationProbe",
-    "ConfigRecord",
+    "Recipe",
     "CoreMLComputeUnits",
     "DeviceFingerprint",
     "Dtype",

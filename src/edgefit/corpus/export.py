@@ -13,7 +13,7 @@ from pathlib import Path
 
 from edgefit.corpus.store import CorpusStore
 
-EXPORTABLE_TABLES = ("measurements", "configs", "graph_fingerprints")
+EXPORTABLE_TABLES = ("measurements", "recipes", "graph_fingerprints")
 
 
 def export_parquet(store: CorpusStore, out_dir: Path | str) -> dict[str, Path]:

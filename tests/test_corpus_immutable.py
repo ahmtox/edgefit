@@ -14,7 +14,6 @@ import pytest
 from edgefit.corpus import CorpusStore, DuplicateRecordError, export_parquet
 from edgefit.schema import (
     AttentionVariant,
-    ConfigRecord,
     DeviceFingerprint,
     GraphFingerprint,
     HostState,
@@ -22,6 +21,7 @@ from edgefit.schema import (
     Metrics,
     NormType,
     Outcome,
+    Recipe,
     RunStats,
 )
 
@@ -35,12 +35,12 @@ def store(tmp_path):
 
 
 def _measurement(
-    device: DeviceFingerprint, host_state: HostState, config: ConfigRecord, **overrides
+    device: DeviceFingerprint, host_state: HostState, recipe: Recipe, **overrides
 ) -> MeasurementRecord:
     base = {
         "harness_version": "0.1.0",
-        "config_id": config.config_id,
-        "model_ref": config.model.ref,
+        "recipe_id": recipe.recipe_id,
+        "model_ref": recipe.model.ref,
         "device": device,
         "host_state": host_state,
         "outcome": Outcome.SUCCESS,
@@ -88,47 +88,47 @@ class TestNoMutationSurface:
 
 class TestInsert:
     def test_measurement_round_trips_losslessly(
-        self, store: CorpusStore, device, host_state, cpu_config
+        self, store: CorpusStore, device, host_state, cpu_recipe
     ) -> None:
-        store.insert_config(cpu_config)
-        record = _measurement(device, host_state, cpu_config)
+        store.insert_recipe(cpu_recipe)
+        record = _measurement(device, host_state, cpu_recipe)
         measurement_id = store.insert_measurement(record)
 
         restored = store.get_measurement(measurement_id)
         assert restored == record
 
     def test_duplicate_measurement_is_rejected(
-        self, store: CorpusStore, device, host_state, cpu_config
+        self, store: CorpusStore, device, host_state, cpu_recipe
     ) -> None:
-        record = _measurement(device, host_state, cpu_config)
+        record = _measurement(device, host_state, cpu_recipe)
         store.insert_measurement(record)
         with pytest.raises(DuplicateRecordError, match="immutable"):
             store.insert_measurement(record)
 
     def test_repeat_measurement_of_same_config_is_allowed(
-        self, store: CorpusStore, device, host_state, cpu_config
+        self, store: CorpusStore, device, host_state, cpu_recipe
     ) -> None:
-        """Repeatability data is the point — the same config measured twice is two rows."""
-        first = _measurement(device, host_state, cpu_config)
+        """Repeatability data is the point — the same recipe measured twice is two rows."""
+        first = _measurement(device, host_state, cpu_recipe)
         second = _measurement(
-            device, host_state, cpu_config, created_at=first.created_at + timedelta(seconds=30)
+            device, host_state, cpu_recipe, created_at=first.created_at + timedelta(seconds=30)
         )
         store.insert_measurement(first)
         store.insert_measurement(second)
         assert store.count("measurements") == 2
 
-    def test_duplicate_config_is_idempotent(self, store: CorpusStore, cpu_config) -> None:
-        assert store.insert_config(cpu_config) == store.insert_config(cpu_config)
-        assert store.count("configs") == 1
+    def test_duplicate_config_is_idempotent(self, store: CorpusStore, cpu_recipe) -> None:
+        assert store.insert_recipe(cpu_recipe) == store.insert_recipe(cpu_recipe)
+        assert store.count("recipes") == 1
 
     def test_failures_are_stored(
-        self, store: CorpusStore, device, host_state, coreml_config
+        self, store: CorpusStore, device, host_state, coreml_recipe
     ) -> None:
         """§5.8: failures train the tier-1 static filter, so they must persist."""
         record = _measurement(
             device,
             host_state,
-            coreml_config,
+            coreml_recipe,
             outcome=Outcome.LOWERING_FAILURE,
             failure_reason="CoreML EP rejected dynamic sequence dimension",
             metrics=None,
@@ -142,16 +142,16 @@ class TestInsert:
         assert rows == [("lowering_failure", "CoreML EP rejected dynamic sequence dimension")]
 
     def test_denormalised_columns_are_queryable(
-        self, store: CorpusStore, device, host_state, cpu_config
+        self, store: CorpusStore, device, host_state, cpu_recipe
     ) -> None:
         """The atlas scans columns, not JSON."""
-        store.insert_config(cpu_config)
-        store.insert_measurement(_measurement(device, host_state, cpu_config))
+        store.insert_recipe(cpu_recipe)
+        store.insert_measurement(_measurement(device, host_state, cpu_recipe))
 
         row = store.query(
             """
             SELECT m.soc, m.os_build, c.intended_provider, m.latency_p50_ms, m.latency_cv
-            FROM measurements m JOIN configs c USING (config_id)
+            FROM measurements m JOIN recipes c USING (recipe_id)
             """
         ).fetchone()
         assert row is not None
@@ -175,9 +175,9 @@ class TestFingerprints:
         assert store.count("graph_fingerprints") == 1
 
 
-def test_export_parquet_is_readable(store: CorpusStore, tmp_path, device, host_state, cpu_config):
-    store.insert_config(cpu_config)
-    store.insert_measurement(_measurement(device, host_state, cpu_config))
+def test_export_parquet_is_readable(store: CorpusStore, tmp_path, device, host_state, cpu_recipe):
+    store.insert_recipe(cpu_recipe)
+    store.insert_measurement(_measurement(device, host_state, cpu_recipe))
 
     written = export_parquet(store, tmp_path / "export")
     assert written["measurements"].exists()
@@ -188,17 +188,17 @@ def test_export_parquet_is_readable(store: CorpusStore, tmp_path, device, host_s
     assert reread == (1,)
 
 
-def test_created_at_survives_the_round_trip(store: CorpusStore, device, host_state, cpu_config):
+def test_created_at_survives_the_round_trip(store: CorpusStore, device, host_state, cpu_recipe):
     """Timezone handling silently corrupting timestamps is a classic corpus poisoner."""
     stamped = datetime(2026, 8, 2, 12, 34, 56, tzinfo=UTC)
-    record = _measurement(device, host_state, cpu_config, created_at=stamped)
+    record = _measurement(device, host_state, cpu_recipe, created_at=stamped)
     restored = store.get_measurement(store.insert_measurement(record))
     assert restored is not None
     assert restored.created_at == stamped
 
 
 def test_timestamp_column_is_readable_from_python(
-    store: CorpusStore, device, host_state, cpu_config
+    store: CorpusStore, device, host_state, cpu_recipe
 ):
     """Reading TIMESTAMPTZ back through SQL needs pytz installed.
 
@@ -206,7 +206,7 @@ def test_timestamp_column_is_readable_from_python(
     invisible until `corpus list` blew up in the terminal.
     """
     stamped = datetime(2026, 8, 2, 12, 34, 56, tzinfo=UTC)
-    store.insert_measurement(_measurement(device, host_state, cpu_config, created_at=stamped))
+    store.insert_measurement(_measurement(device, host_state, cpu_recipe, created_at=stamped))
 
     row = store.query("SELECT created_at FROM measurements").fetchone()
     assert row is not None

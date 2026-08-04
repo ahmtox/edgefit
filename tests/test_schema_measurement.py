@@ -30,7 +30,7 @@ SAMPLES = [4.81, 4.92, 5.03, 4.88, 5.21, 4.95]
 def _record(device: DeviceFingerprint, host_state: HostState, **overrides: object):
     base = {
         "harness_version": "0.1.0",
-        "config_id": "abc123",
+        "recipe_id": "abc123",
         "model_ref": "hf:sentence-transformers/all-MiniLM-L6-v2",
         "device": device,
         "host_state": host_state,

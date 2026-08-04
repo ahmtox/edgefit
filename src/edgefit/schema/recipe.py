@@ -2,11 +2,11 @@
 
 Design notes that matter later:
 
-* **The target device is deliberately absent.** One config is measured on many
+* **The target device is deliberately absent.** One recipe is measured on many
   devices; that product is exactly the atlas matrix. Device identity lives on the
   measurement record.
-* **Frozen and content-addressed.** ``config_id`` is a hash of the canonical form,
-  so the same config always lands on the same id and a duplicate insert into the
+* **Frozen and content-addressed.** ``recipe_id`` is a hash of the canonical form,
+  so the same recipe always lands on the same id and a duplicate insert into the
   insert-only corpus is detectable rather than silently duplicated.
 * **Runtime-specific settings live in a discriminated variant**, not in a flat
   god-object. Adding ExecuTorch adds a variant; it does not mutate the core.
@@ -31,7 +31,7 @@ from edgefit.schema.common import (
 
 # Bump on any change to the meaning or shape of these fields. Records are never
 # edited in place; a schema change requires a migration (PROJECT.md §6.1).
-CONFIG_SCHEMA_VERSION = 1
+RECIPE_SCHEMA_VERSION = 1
 
 
 class _Frozen(BaseModel):
@@ -103,7 +103,7 @@ class PartitionConfig(_Frozen):
 
 
 class ExecutionConfig(_Frozen):
-    """PROJECT.md §6.1 runtime config axis. Runtime-agnostic knobs only."""
+    """PROJECT.md §6.1 runtime recipe axis. Runtime-agnostic knobs only."""
 
     num_threads: int | None = Field(default=None, gt=0)
     batch_size: int = Field(default=1, gt=0)
@@ -176,9 +176,9 @@ class OrtRuntimeConfig(_Frozen):
 
     @property
     def intended_provider(self) -> OrtProvider:
-        """The accelerator this config is *trying* to reach.
+        """The accelerator this recipe is *trying* to reach.
 
-        Fallback is measured against this. If the whole point of a config is the
+        Fallback is measured against this. If the whole point of a recipe is the
         Neural Engine and half the graph lands on CPU, that gap is the finding.
         """
         for provider in self.providers:
@@ -193,10 +193,10 @@ class OrtRuntimeConfig(_Frozen):
 RuntimeConfig = OrtRuntimeConfig
 
 
-class ConfigRecord(_Frozen):
+class Recipe(_Frozen):
     """One point in the search space. Immutable, versioned, content-addressed."""
 
-    schema_version: int = CONFIG_SCHEMA_VERSION
+    schema_version: int = RECIPE_SCHEMA_VERSION
     model: ModelRef
     runtime: RuntimeConfig
     quantization: QuantizationConfig | None = None
@@ -205,11 +205,11 @@ class ConfigRecord(_Frozen):
     execution: ExecutionConfig = ExecutionConfig()
     label: str | None = Field(
         default=None,
-        description="Human tag. Excluded from config_id — it carries no semantics.",
+        description="Human tag. Excluded from recipe_id — it carries no semantics.",
     )
 
     @model_validator(mode="after")
-    def _check_coherent(self) -> ConfigRecord:
+    def _check_coherent(self) -> Recipe:
         needs_calibration = (
             self.quantization is not None
             and self.quantization.activation_quant is ActivationQuant.STATIC
@@ -219,7 +219,7 @@ class ConfigRecord(_Frozen):
         return self
 
     @property
-    def config_id(self) -> str:
+    def recipe_id(self) -> str:
         """Content hash over everything semantically meaningful."""
         payload = self.model_dump(mode="json", exclude={"label"})
         return content_hash(payload)
@@ -227,3 +227,35 @@ class ConfigRecord(_Frozen):
     @property
     def intended_provider(self) -> str:
         return str(self.runtime.intended_provider)
+
+    def derive(self, *, label: str | None = None, **sections: object) -> Recipe:
+        """A new recipe with sections deep-merged over this one.
+
+        PROJECT.md §6.1 requires recipes to *compose*: to inherit from
+        expert-vetted defaults and "swap cleanly so re-compiling with a different
+        config is one field change." That is the difference between a recipe object
+        and a dict, and it is what makes a known-good baseline usable as
+        warm-start material for the search rather than something to copy-paste.
+
+        Pass a dict to merge into a section, or a model instance to replace it:
+
+            fast = baseline.derive(execution={"num_threads": 4})
+            ane = baseline.derive(runtime={"coreml_compute_units": "CPUAndNeuralEngine"})
+
+        Merging is one level deep, which matches the shape of the object: sections
+        are flat bags of knobs, so deeper recursion would buy nothing and make the
+        result harder to predict.
+        """
+        payload = self.model_dump(mode="json")
+        for name, value in sections.items():
+            if name not in type(self).model_fields:
+                raise ValueError(f"unknown recipe section {name!r}")
+            if isinstance(value, dict) and isinstance(payload.get(name), dict):
+                payload[name] = payload[name] | value
+            elif isinstance(value, BaseModel):
+                payload[name] = value.model_dump(mode="json")
+            else:
+                payload[name] = value
+        if label is not None:
+            payload["label"] = label
+        return type(self).model_validate(payload)

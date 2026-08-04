@@ -1,0 +1,7 @@
+# CoreML pinned to the Neural Engine. Inherits the working CoreML baseline and
+# changes one knob — restricting compute units usually shrinks what the
+# partitioner will claim, and the fallback delta is the point of measuring it.
+extends: ort_coreml_fp32.yaml
+label: ort-coreml-ane
+runtime:
+  coreml_compute_units: CPUAndNeuralEngine

@@ -10,7 +10,7 @@ an MPSGraph assertion:
 which aborts the process outright (SIGABRT). In-process, that takes down the
 whole sweep and leaves nothing behind. Out-of-process, the parent records a
 ``runtime_failure`` row and carries on — and per §5.8 that row is exactly what
-trains the tier-1 static filter to stop proposing the config next time.
+trains the tier-1 static filter to stop proposing the recipe next time.
 
 Isolation also keeps peak RSS attributable: each tier reports its own
 ``RUSAGE_SELF`` high-water mark, so analysis overhead never inflates the memory
@@ -27,14 +27,14 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from edgefit.schema.config import ConfigRecord
+from edgefit.schema.recipe import Recipe
 
 
 def _analyze(job: dict) -> dict:
     from edgefit.backends import get_backend  # noqa: PLC0415
 
-    config = ConfigRecord.model_validate(job["config"])
-    analysis = get_backend(config.runtime.kind).analyze(Path(job["artifact_dir"]), config)
+    recipe = Recipe.model_validate(job["recipe"])
+    analysis = get_backend(recipe.runtime.kind).analyze(Path(job["artifact_dir"]), recipe)
     return {
         "lowered": analysis.lowered,
         "artifact_bytes": analysis.artifact_bytes,
@@ -50,10 +50,10 @@ def _analyze(job: dict) -> dict:
 def _measure(job: dict) -> dict:
     from edgefit.backends import get_backend  # noqa: PLC0415
 
-    config = ConfigRecord.model_validate(job["config"])
-    result = get_backend(config.runtime.kind).measure(
+    recipe = Recipe.model_validate(job["recipe"])
+    result = get_backend(recipe.runtime.kind).measure(
         Path(job["artifact_dir"]),
-        config,
+        recipe,
         runs=int(job["runs"]),
         warmup=int(job["warmup"]),
     )

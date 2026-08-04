@@ -13,8 +13,8 @@ There is no ``UPDATE`` or ``DELETE`` anywhere in this system by design
 from __future__ import annotations
 
 DDL = """
-CREATE TABLE IF NOT EXISTS configs (
-    config_id          VARCHAR PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS recipes (
+    recipe_id          VARCHAR PRIMARY KEY,
     schema_version     INTEGER NOT NULL,
     model_ref          VARCHAR NOT NULL,
     task               VARCHAR NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS measurements (
     harness_version       VARCHAR NOT NULL,
     created_at            TIMESTAMPTZ NOT NULL,
 
-    config_id             VARCHAR NOT NULL,
+    recipe_id             VARCHAR NOT NULL,
     model_ref             VARCHAR NOT NULL,
     graph_fingerprint_id  VARCHAR,
 
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS measurements (
     payload               VARCHAR NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS measurements_by_config ON measurements (config_id);
+CREATE INDEX IF NOT EXISTS measurements_by_config ON measurements (recipe_id);
 CREATE INDEX IF NOT EXISTS measurements_by_device ON measurements (device_id);
 CREATE INDEX IF NOT EXISTS measurements_by_model  ON measurements (model_ref);
 """
