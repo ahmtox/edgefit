@@ -23,7 +23,7 @@ def group_median(rows: list[Row]) -> float:
     A true median (averaging the two middle values for an even count), so the
     displayed number and the sort order come from the same statistic.
     """
-    return statistics.median([row.p50_ms or 0.0 for row in rows])
+    return statistics.median([row.primary_ms or 0.0 for row in rows])
 
 
 def _slug(value: str) -> str:
@@ -76,6 +76,10 @@ class Row:
     p50_ms: float | None
     p95_ms: float | None
     cv: float | None
+    ttft_p50_ms: float | None
+    ttft_cv: float | None
+    decode_tok_s: float | None
+    token_agreement: float | None
     peak_rss_mib: float | None
     artifact_mib: float | None
     lowering_ms: float | None
@@ -95,6 +99,24 @@ class Row:
     @property
     def ok(self) -> bool:
         return self.outcome == "success"
+
+    @property
+    def generative(self) -> bool:
+        return self.ttft_p50_ms is not None
+
+    @property
+    def primary_cv(self) -> float | None:
+        """The variance of whichever distribution this task actually has."""
+        return self.ttft_cv if self.generative else self.cv
+
+    @property
+    def primary_ms(self) -> float | None:
+        """Whichever timing this task actually has.
+
+        Never averaged with the other kind: a generative recipe has TTFT and a decode
+        rate, and no single latency at all.
+        """
+        return self.ttft_p50_ms if self.generative else self.p50_ms
 
     @property
     def series(self) -> int:
@@ -156,8 +178,12 @@ class Model:
 
     @property
     def best(self) -> Row | None:
-        ranked = [r for r in self.successes if r.p50_ms is not None]
-        return min(ranked, key=lambda r: r.p50_ms or 0) if ranked else None
+        ranked = [r for r in self.successes if r.primary_ms is not None]
+        return min(ranked, key=lambda r: r.primary_ms or 0) if ranked else None
+
+    @property
+    def generative(self) -> bool:
+        return any(row.generative for row in self.successes)
 
     @property
     def groups(self) -> list[tuple[str, list[Row]]]:
@@ -169,7 +195,7 @@ class Model:
         """
         grouped: dict[str, list[Row]] = {}
         for row in self.successes:
-            if row.p50_ms is not None:
+            if row.primary_ms is not None:
                 grouped.setdefault(row.recipe_label, []).append(row)
         # Ordered by the same statistic the chart displays. Sorting by the minimum
         # while labelling the median puts bars out of order for repeated recipes.
@@ -194,6 +220,7 @@ SELECT m.measurement_id, m.model_ref, r.task, coalesce(r.label, r.intended_provi
        m.device_id, m.device_model, m.soc, m.os_version, m.os_build,
        m.outcome, m.failure_reason, m.run_count,
        m.latency_p50_ms, m.latency_p95_ms, m.latency_cv,
+       m.ttft_p50_ms, m.ttft_cv, m.decode_tok_s_p50, m.token_agreement,
        m.peak_rss_bytes, m.artifact_bytes, m.lowering_ms, m.output_cosine_vs_reference,
        m.fallback_flops_pct, m.fallback_node_pct, m.as_run_time_pct, m.as_run_partitions,
        m.thermal_state, m.power_source, m.calibration_ratio,
@@ -217,7 +244,8 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
         (
             mid, model_ref, task, label, recipe_id, provider, dtype, granularity,
             device_id, device_model, soc, os_version, os_build,
-            outcome, reason, run_count, p50, p95, cv, rss, artifact, lowering, cosine,
+            outcome, reason, run_count, p50, p95, cv, ttft, ttft_cv, decode, tok_agree,
+            rss, artifact, lowering, cosine,
             fb_flops, fb_node, as_run_time, as_run_parts,
             thermal, power, calib, harness, created, stress,
         ) = record
@@ -246,6 +274,10 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
                 p50_ms=p50,
                 p95_ms=p95,
                 cv=cv,
+                ttft_p50_ms=ttft,
+                ttft_cv=ttft_cv,
+                decode_tok_s=decode,
+                token_agreement=tok_agree,
                 peak_rss_mib=rss / _MIB if rss else None,
                 artifact_mib=artifact / _MIB if artifact else None,
                 lowering_ms=lowering,
@@ -335,7 +367,7 @@ def load_models(store: CorpusStore, rows: list[Row]) -> list[Model]:
                 attention_variant=fingerprint.get("attention_variant"),
                 norm_type=fingerprint.get("norm_type"),
                 op_histogram=fingerprint.get("op_histogram", {}),
-                rows=sorted(model_rows, key=lambda r: (r.p50_ms is None, r.p50_ms or 0)),
+                rows=sorted(model_rows, key=lambda r: (r.primary_ms is None, r.primary_ms or 0)),
                 graph_sizes=tuple(graph_sizes.get(model_ref, ())),
             )
         )
@@ -373,7 +405,7 @@ def load_devices(store: CorpusStore, rows: list[Row]) -> list[Device]:
                 os_name=device.get("os_name", "unknown"),
                 os_version=device.get("os_version", device_rows[0].os_version),
                 os_build=device.get("os_build", device_rows[0].os_build),
-                rows=sorted(device_rows, key=lambda r: (r.p50_ms is None, r.p50_ms or 0)),
+                rows=sorted(device_rows, key=lambda r: (r.primary_ms is None, r.primary_ms or 0)),
             )
         )
     return sorted(devices, key=lambda d: d.name)

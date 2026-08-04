@@ -58,16 +58,30 @@ def _shape_of(value) -> list[int | str]:
     return dims
 
 
-def _detect_attention(ops: Counter[str]) -> AttentionVariant:
+def _detect_attention(
+    ops: Counter[str], n_heads: int | None = None, n_kv_heads: int | None = None
+) -> AttentionVariant:
+    """Identify the attention variant, or admit that we cannot.
+
+    When head counts are known the answer is arithmetic. When they are not, a
+    decomposed Softmax-over-MatMul pattern proves attention *exists* but says nothing
+    about KV grouping — so the answer is UNKNOWN, not MHA.
+
+    This previously returned MHA for that case, which labelled Llama-3.2-1B (GQA,
+    32 query heads over 8 KV heads) as multi-head. The fingerprint is the key the
+    cost model indexes on, so a confidently wrong label there is worse than a blank:
+    it makes knowledge transfer between models silently incorrect.
+    """
+    if n_heads and n_kv_heads:
+        if n_kv_heads == 1:
+            return AttentionVariant.MQA
+        return AttentionVariant.MHA if n_kv_heads == n_heads else AttentionVariant.GQA
     for op_type, variant in _ATTENTION_BY_OP.items():
         if ops.get(op_type):
             return variant
     if not ops.get("Softmax"):
         return AttentionVariant.NONE
-    # Softmax over a MatMul chain is the decomposed attention pattern. We can see
-    # that attention exists but not how the KV heads are grouped, so MHA is the
-    # honest floor rather than a claim about grouping.
-    return AttentionVariant.MHA if ops.get("MatMul") else AttentionVariant.UNKNOWN
+    return AttentionVariant.UNKNOWN
 
 
 def _detect_norm(ops: Counter[str]) -> NormType:
@@ -77,8 +91,18 @@ def _detect_norm(ops: Counter[str]) -> NormType:
     return NormType.UNKNOWN
 
 
-def fingerprint_onnx(model: ModelProto) -> GraphFingerprint:
-    """Summarise a graph's structure. Contains no weights and no customer data."""
+def fingerprint_onnx(
+    model: ModelProto,
+    *,
+    n_heads: int | None = None,
+    n_kv_heads: int | None = None,
+    n_layers: int | None = None,
+) -> GraphFingerprint:
+    """Summarise a graph's structure. Contains no weights and no customer data.
+
+    Head counts are optional and, when supplied by the exporter, make the attention
+    variant exact instead of inferred.
+    """
     graph = model.graph
     ops: Counter[str] = Counter(node.op_type for node in graph.node)
 
@@ -97,7 +121,10 @@ def fingerprint_onnx(model: ModelProto) -> GraphFingerprint:
         input_shapes={value.name: _shape_of(value) for value in graph.input},
         output_shapes={value.name: _shape_of(value) for value in graph.output},
         opset={(entry.domain or "ai.onnx"): entry.version for entry in model.opset_import},
-        attention_variant=_detect_attention(ops),
+        attention_variant=_detect_attention(ops, n_heads, n_kv_heads),
         norm_type=_detect_norm(ops),
         activation_fns=tuple(sorted(op for op in ops if op in _ACTIVATIONS)),
+        n_layers=n_layers,
+        n_heads=n_heads,
+        n_kv_heads=n_kv_heads,
     )

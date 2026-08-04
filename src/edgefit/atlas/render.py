@@ -121,7 +121,8 @@ _MATRIX_HEAD = """
 <th class="sortable">Target</th>
 <th class="sortable">Outcome</th>
 <th class="sortable num">p50 ms</th>
-<th class="sortable num">p95 ms</th>
+<th class="sortable num">TTFT ms</th>
+<th class="sortable num">tok/s</th>
 <th class="sortable num">cv</th>
 <th class="sortable num">size MiB</th>
 <th class="sortable num">peak RSS</th>
@@ -142,8 +143,9 @@ def _matrix_row(row: Row, *, depth: int) -> str:
         f'<span class="dim">{escape(row.provider_short)}</span></td>'
         f"<td>{_outcome_badge(row)}</td>"
         + _cell(row.p50_ms)
-        + _cell(row.p95_ms)
-        + _cell(None if row.cv is None else row.cv * 100, 1, "%")
+        + _cell(row.ttft_p50_ms, 1)
+        + _cell(row.decode_tok_s)
+        + _cell(None if row.primary_cv is None else row.primary_cv * 100, 1, "%")
         + _cell(row.artifact_mib, 0)
         + _cell(row.peak_rss_mib, 0)
         + _cell(row.cosine, 4)
@@ -166,7 +168,12 @@ def index(summary: Summary, rows: list[Row], models: list[Model]) -> str:
         "<h2>The matrix</h2>",
         "<p>Every measurement in the corpus, successes and failures together. "
         "Sort by any column; a missing value always sorts last, because "
-        "&ldquo;not measured&rdquo; is not a small number.</p>",
+        "&ldquo;not measured&rdquo; is not a small number.</p>"
+        "<p>Generative rows carry <strong>TTFT</strong> and <strong>tok/s</strong> "
+        "instead of a single latency, and their <em>p50 ms</em> cell is deliberately "
+        "empty: prefill and decode are different workloads, and one averaged number "
+        "would describe neither. See "
+        "<a href='methodology.html#generative'>methodology</a>.</p>",
         '<div class="controls">'
         '<input type="search" placeholder="filter model, recipe, target…" '
         'data-filter-text data-target="matrix">'
@@ -285,10 +292,13 @@ def model_page(model: Model, depth: int = 1) -> str:
         + (f'<p class="dim">{ops}</p>' if ops else "")
         + _graph_sizes(model)
         + "</div>",
-        "<h3>Latency by recipe</h3>",
+        "<h3>Time to first token by recipe</h3>" if model.generative
+        else "<h3>Latency by recipe</h3>",
         "<figure>",
         charts.horizontal_bars(
-            bars, unit="p50 latency, ms", series_names=("CPU", "accelerator")
+            bars,
+            unit="TTFT (prefill), ms" if model.generative else "p50 latency, ms",
+            series_names=("CPU", "accelerator"),
         ),
         "<figcaption>Median of 10 timed runs after 3 discarded warmups. "
         "Hover a bar for variance and artifact size.</figcaption></figure>",
@@ -335,16 +345,51 @@ def model_page(model: Model, depth: int = 1) -> str:
             f"<tbody>{''.join(lines)}</tbody></table></div>",
         ]
 
+    if model.generative:
+        decode_bars = [
+            charts.Bar(
+                label=label,
+                value=group[0].decode_tok_s or 0.0,
+                display=f"{group[0].decode_tok_s:.2f}",
+                series=group[0].series,
+            )
+            for label, group in model.groups
+            if group[0].decode_tok_s is not None
+        ]
+        if decode_bars:
+            body += [
+                "<h3>Decode throughput</h3>",
+                "<figure>",
+                charts.horizontal_bars(
+                    sorted(decode_bars, key=lambda b: -b.value),
+                    unit="decode tokens/second — higher is better",
+                    series_names=("CPU", "accelerator"),
+                ),
+                "<figcaption>Steady-state generation rate after prefill, with the KV "
+                "cache threaded through every step. The chart above it is TTFT, which "
+                "is the prefill cost — the two are separate workloads and are never "
+                "averaged together.</figcaption></figure>",
+            ]
+
     body += [
         "<h3>Every recipe measured</h3>",
         '<div class="scroll"><table data-sortable><thead>',
         "<tr><th class='sortable'>Recipe</th><th class='sortable'>Target</th>"
-        "<th class='sortable'>Outcome</th><th class='sortable num'>p50 ms</th>"
-        "<th class='sortable num'>cv</th><th class='sortable num'>size MiB</th>"
-        "<th class='sortable num'>cosine</th>"
-        "<th class='sortable num'>FLOP fb (auth)</th>"
-        "<th class='sortable num'>time fb (run)</th>"
-        "<th class='sortable num'>partitions</th></tr>",
+        "<th class='sortable'>Outcome</th>"
+        + (
+            "<th class='sortable num'>TTFT ms</th><th class='sortable num'>tok/s</th>"
+            if model.generative
+            else "<th class='sortable num'>p50 ms</th>"
+        )
+        + "<th class='sortable num'>cv</th><th class='sortable num'>size MiB</th>"
+        + (
+            "<th class='sortable num'>tokens</th>"
+            if model.generative
+            else "<th class='sortable num'>cosine</th>"
+        )
+        + "<th class='sortable num'>FLOP fb (auth)</th>"
+        + "<th class='sortable num'>time fb (run)</th>"
+        + "<th class='sortable num'>partitions</th></tr>",
         "</thead><tbody>",
     ]
     for row in model.rows:
@@ -352,10 +397,18 @@ def model_page(model: Model, depth: int = 1) -> str:
             f"<tr><td class='mono'>{escape(row.recipe_label)}</td>"
             f"<td>{escape(row.provider_short)}</td>"
             f"<td>{_outcome_badge(row)}</td>"
-            + _cell(row.p50_ms)
-            + _cell(None if row.cv is None else row.cv * 100, 1, "%")
+            + (
+                _cell(row.ttft_p50_ms, 1) + _cell(row.decode_tok_s)
+                if model.generative
+                else _cell(row.p50_ms)
+            )
+            + _cell(None if row.primary_cv is None else row.primary_cv * 100, 1, "%")
             + _cell(row.artifact_mib, 0)
-            + _cell(row.cosine, 4)
+            + (
+                _cell(None if row.token_agreement is None else row.token_agreement * 100, 0, "%")
+                if model.generative
+                else _cell(row.cosine, 4)
+            )
             + _cell(row.fb_flops_authored, 1, "%")
             + _cell(row.fb_time_as_run, 1, "%")
             + _cell(None if row.as_run_partitions is None else float(row.as_run_partitions), 0)

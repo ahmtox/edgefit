@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS measurements (
     latency_p95_ms        DOUBLE,
     latency_cv            DOUBLE,
     ttft_p50_ms           DOUBLE,
+    ttft_cv               DOUBLE,
     decode_tok_s_p50      DOUBLE,
     sustained_tok_s_5min  DOUBLE,
     peak_rss_bytes        BIGINT,

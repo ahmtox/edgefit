@@ -253,6 +253,7 @@ def export_decoder(
                 "opset": opset,
                 "static_shapes": False,
                 "layers": layers,
+                "n_heads": int(config.num_attention_heads),
                 "kv_heads": kv_heads,
                 "head_dim": head_dim,
                 "prompt": PROMPT,

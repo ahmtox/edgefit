@@ -238,3 +238,66 @@ class TestParseProfile:
         assert events[0].node_name == "dense"
         assert events[0].op_type == "MatMul"
         assert events[0].duration_us == 900.0
+
+
+class TestAttentionVariant:
+    """The fingerprint is the key the cost model indexes on (PROJECT.md §5.2).
+
+    A confidently wrong label there is worse than a blank, because it makes knowledge
+    transfer between models silently incorrect. This class exists because the detector
+    used to report MHA for Llama-3.2-1B, which is GQA with 32 query heads over 8 KV
+    heads.
+    """
+
+    def _decomposed_attention(self) -> onnx.ModelProto:
+        """Softmax over a MatMul chain — attention with no explicit op to read."""
+        graph = helper.make_graph(
+            [
+                helper.make_node("MatMul", ["q", "k"], ["scores"], name="qk"),
+                helper.make_node("Softmax", ["scores"], ["probs"], name="softmax"),
+                helper.make_node("MatMul", ["probs", "v"], ["out"], name="av"),
+            ],
+            "attn",
+            inputs=[
+                helper.make_tensor_value_info(n, TensorProto.FLOAT, [1, 4, 8, 8])
+                for n in ("q", "k", "v")
+            ],
+            outputs=[helper.make_tensor_value_info("out", TensorProto.FLOAT, [1, 4, 8, 8])],
+        )
+        return helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+
+    def test_undecidable_reports_unknown_not_mha(self) -> None:
+        """The regression. Softmax+MatMul proves attention exists, not how KV is grouped."""
+        variant = fingerprint_onnx(self._decomposed_attention()).attention_variant
+        assert variant is AttentionVariant.UNKNOWN
+
+    def test_head_counts_make_it_exact(self) -> None:
+        model = self._decomposed_attention()
+        assert (
+            fingerprint_onnx(model, n_heads=32, n_kv_heads=8).attention_variant
+            is AttentionVariant.GQA
+        )
+        assert (
+            fingerprint_onnx(model, n_heads=32, n_kv_heads=32).attention_variant
+            is AttentionVariant.MHA
+        )
+        assert (
+            fingerprint_onnx(model, n_heads=32, n_kv_heads=1).attention_variant
+            is AttentionVariant.MQA
+        )
+
+    def test_head_counts_are_recorded_for_the_cost_model(self) -> None:
+        fingerprint = fingerprint_onnx(
+            self._decomposed_attention(), n_heads=32, n_kv_heads=8, n_layers=16
+        )
+        assert (fingerprint.n_heads, fingerprint.n_kv_heads, fingerprint.n_layers) == (32, 8, 16)
+
+    def test_no_softmax_still_means_no_attention(self) -> None:
+        assert fingerprint_onnx(_matmul_graph()).attention_variant is AttentionVariant.NONE
+
+    def test_head_counts_change_the_fingerprint_id(self) -> None:
+        """Two architectures must not collide on one key."""
+        model = self._decomposed_attention()
+        gqa = fingerprint_onnx(model, n_heads=32, n_kv_heads=8)
+        mha = fingerprint_onnx(model, n_heads=32, n_kv_heads=32)
+        assert gqa.fingerprint_id != mha.fingerprint_id

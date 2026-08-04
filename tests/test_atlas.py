@@ -155,6 +155,7 @@ def test_group_median_averages_the_middle_of_an_even_count(device, host_state, c
             weight_dtype=None, granularity=None, device_slug="d", device_model="Mac",
             soc="M2", os_version="15.2", os_build="24C101", outcome="success",
             failure_reason=None, run_count=10, p50_ms=p50, p95_ms=p50, cv=0.01,
+            ttft_p50_ms=None, ttft_cv=None, decode_tok_s=None, token_agreement=None,
             peak_rss_mib=1.0, artifact_mib=1.0, lowering_ms=1.0, cosine=1.0,
             fb_flops_authored=None, fb_node_authored=None, fb_time_as_run=None,
             as_run_partitions=None, thermal_state="nominal", power_source="ac",

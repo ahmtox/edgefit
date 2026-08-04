@@ -151,7 +151,21 @@ class OrtBackend:
                 failure_reason=f"could not load ONNX model: {exc}",
             )
 
-        fingerprint = fingerprint_onnx(model)
+        # A decoder's meta.json records its head layout, so the attention variant is
+        # arithmetic rather than guessed. Without it the detector cannot tell GQA from
+        # MHA and correctly says UNKNOWN.
+        architecture: dict[str, int] = {}
+        meta_path = artifact_dir / "meta.json"
+        if meta_path.exists():
+            import json  # noqa: PLC0415
+
+            meta = json.loads(meta_path.read_text())
+            for key, field in (("layers", "n_layers"), ("kv_heads", "n_kv_heads")):
+                if key in meta:
+                    architecture[field] = int(meta[key])
+            if "n_heads" in meta:
+                architecture["n_heads"] = int(meta["n_heads"])
+        fingerprint = fingerprint_onnx(model, **architecture)
         flops = estimate_flops(model)
 
         feeds = self._feeds(artifact_dir, recipe)
