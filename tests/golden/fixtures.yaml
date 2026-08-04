@@ -1,0 +1,67 @@
+# Golden fixtures — the gate for everything downstream (PROJECT.md §9 step 4).
+#
+# PROJECT.md §9 names two validation shortcuts that replace a hand-written
+# methodology document:
+#
+#   1. Known-answer test — reproduce a number we already know, within tolerance.
+#   2. Two-unit test — the same config on two units of one SKU must agree.
+#
+# We can do (1) properly. We CANNOT do (2): it needs two physical units of one
+# SKU and this fleet is a single MacBook Air. That is recorded as a blocked gap
+# in docs/STATUS.md rather than quietly substituted with something weaker.
+#
+# What replaces it here is deliberately labelled for what it is: a
+# self-consistency check across separate sessions, which catches drift but
+# cannot catch a defect in the methodology that both runs share.
+#
+# Latency bands are intentionally wide. They exist to catch order-of-magnitude
+# regressions (a delegate silently disabled, a 1024x memory unit error), not to
+# police normal machine-to-machine variation. Tight bands on a laptop produce
+# flaky tests, and a flaky gate is a gate people learn to ignore.
+
+host_class:
+  # Bands below were recorded on this host. Another machine needs its own entry.
+  soc: Apple M2
+  os_name: macOS
+
+numerics:
+  # Known-answer test: ORT fp32 output must match the PyTorch fp32 reference
+  # captured at export time. This is the check that catches a silently wrong
+  # kernel — the failure mode that would poison every number in the corpus.
+  min_cosine_similarity: 0.9999
+  max_abs_difference: 0.002
+
+fixtures:
+  - id: minilm-cpu-fp32
+    model: hf:sentence-transformers/all-MiniLM-L6-v2
+    config: configs/ort_cpu_fp32.yaml
+    expect:
+      outcome: success
+      latency_p50_ms: {min: 2.0, max: 120.0}
+      peak_rss_mib: {min: 100, max: 2500}
+      artifact_mib: {min: 60, max: 120}
+      # Pure CPU: nothing can fall back, so this must be exactly zero.
+      fallback_flops_pct: {min: 0.0, max: 0.0}
+
+  - id: minilm-coreml-fp32
+    model: hf:sentence-transformers/all-MiniLM-L6-v2
+    config: configs/ort_coreml_fp32.yaml
+    expect:
+      outcome: success
+      latency_p50_ms: {min: 2.0, max: 400.0}
+      peak_rss_mib: {min: 100, max: 3000}
+      # The lead finding, pinned as a regression test. The CoreML EP claims a
+      # majority of *nodes* while leaving essentially all the *arithmetic* on
+      # CPU. If this band is ever violated downward, either ORT improved
+      # substantially or our attribution broke — both worth stopping for.
+      fallback_flops_pct: {min: 90.0, max: 100.0}
+      fallback_node_pct: {min: 20.0, max: 70.0}
+
+  - id: minilm-coreml-mlprogram-crashes
+    model: hf:sentence-transformers/all-MiniLM-L6-v2
+    config: configs/ort_coreml_mlprogram.yaml
+    expect:
+      # A known delegate-level abort. Pinned so that (a) the harness keeps
+      # surviving it and (b) we notice the day ORT fixes it.
+      outcome: lowering_failure
+      failure_reason_contains: SIGABRT
