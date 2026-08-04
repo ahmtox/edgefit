@@ -44,6 +44,11 @@ def _analyze(job: dict) -> dict:
             analysis.fingerprint.model_dump(mode="json") if analysis.fingerprint else None
         ),
         "fallback": analysis.fallback.model_dump(mode="json") if analysis.fallback else None,
+        "fallback_as_run": (
+            analysis.fallback_as_run.model_dump(mode="json")
+            if analysis.fallback_as_run
+            else None
+        ),
     }
 
 

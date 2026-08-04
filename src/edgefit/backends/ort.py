@@ -29,7 +29,11 @@ import numpy as np
 import onnx
 import onnxruntime as ort
 
-from edgefit.backends.analysis.ep_placement import build_fallback_report, parse_profile
+from edgefit.backends.analysis.ep_placement import (
+    build_as_run_report,
+    build_fallback_report,
+    parse_profile,
+)
 from edgefit.backends.analysis.flops import FLOPS_ESTIMATOR_VERSION, estimate_flops
 from edgefit.backends.analysis.graph import fingerprint_onnx
 from edgefit.backends.base import DeviceRun, StaticAnalysis
@@ -194,7 +198,42 @@ class OrtBackend:
             artifact_bytes=artifact_bytes,
             fingerprint=fingerprint,
             fallback=fallback,
+            fallback_as_run=self._as_run_report(model_path, recipe, feeds),
             lowering_ms=lowering_ms,
+        )
+
+    def _as_run_report(self, model_path: Path, recipe: Recipe, feeds: dict):
+        """Profile once more at the recipe's own optimisation level.
+
+        The partition analysed with optimisation disabled is measurably not the one
+        executed at level `all` — on ViT-base, 244 CPU nodes became 86 — so a
+        fallback figure from the first pass does not describe the timed run. Cheap
+        enough to just measure both rather than argue about which is right.
+        """
+        level = recipe.runtime.graph_optimization_level
+        if level is GraphOptLevel.DISABLED:
+            return None  # identical to the as-authored pass; a duplicate row is noise
+
+        with tempfile.TemporaryDirectory() as scratch:
+            prefix = os.path.join(scratch, "asrun")
+            try:
+                session = self._create_session(
+                    model_path, recipe, opt_level=level, profile_prefix=prefix
+                )
+                session.run(None, feeds)
+                events = parse_profile(session.end_profiling())
+                del session
+            except Exception:  # noqa: BLE001 - the primary report already landed
+                return None
+            for stale in glob.glob(f"{prefix}*"):
+                with contextlib.suppress(OSError):
+                    os.remove(stale)
+
+        return build_as_run_report(
+            events,
+            intended_provider=recipe.intended_provider,
+            graph_optimization=str(level),
+            runs=1,
         )
 
     # -- tier 2: device measurement ---------------------------------------

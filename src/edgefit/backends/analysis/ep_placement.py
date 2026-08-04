@@ -164,3 +164,69 @@ def build_fallback_report(
         ),
         unclaimed_op_types=dict(unclaimed.most_common()),
     )
+
+
+def build_as_run_report(
+    events: list[KernelEvent],
+    intended_provider: str,
+    graph_optimization: str,
+    runs: int = 1,
+) -> FallbackReport:
+    """Attribute the graph *as ORT actually executed it*.
+
+    Necessary because graph optimisation rewrites the graph before partitioning, and
+    it does so substantially: on ViT-base the CPU node count fell from 244 to 86 and
+    CoreML's measured time share rose from 53.7% to 81.5% between level `disabled`
+    and level `all`. A fallback figure taken from the unoptimized graph therefore
+    does not describe the run that was timed.
+
+    Fusion destroys the original node names, so this report deliberately carries no
+    FLOP attribution — the denominator would be a guess. Its honest contents are
+    time share, partition count, and the executed-node split.
+
+    Note what time share is *not*: an efficiency measure. It says where the time
+    went, not whether sending that work to the accelerator was a good idea. MiniLM
+    spends 70.5% of its time on CoreML and is still 2x slower than plain CPU.
+    """
+    fused: set[str] = set()
+    executed_by_provider: Counter[str] = Counter()
+    time_by_provider: Counter[str] = Counter()
+
+    for event in events:
+        time_by_provider[event.provider] += event.duration_us
+        if _FUSED_NODE.match(event.node_name):
+            fused.add(event.node_name)
+        else:
+            executed_by_provider[event.provider] += 1
+
+    # Each fused partition is one executed node from ORT's point of view.
+    per_run = max(runs, 1)
+    nodes_off_intended = sum(
+        count for provider, count in executed_by_provider.items() if provider != intended_provider
+    ) // per_run
+    nodes_on_intended = len(fused) + (executed_by_provider.get(intended_provider, 0) // per_run)
+    nodes_total = nodes_on_intended + nodes_off_intended
+
+    total_us = sum(time_by_provider.values())
+    intended_us = time_by_provider.get(intended_provider, 0.0)
+
+    return FallbackReport(
+        intended_provider=intended_provider,
+        nodes_total=nodes_total,
+        nodes_on_intended=nodes_on_intended,
+        fallback_node_pct=(
+            round(100.0 * nodes_off_intended / nodes_total, 4) if nodes_total else 0.0
+        ),
+        time_total_us=round(total_us / per_run, 3) if total_us else None,
+        time_on_intended_us=round(intended_us / per_run, 3) if total_us else None,
+        fallback_time_pct=(
+            round(100.0 * (total_us - intended_us) / total_us, 4) if total_us else None
+        ),
+        nodes_per_provider={
+            provider: count // per_run for provider, count in executed_by_provider.items()
+        }
+        | ({f"{intended_provider} (fused partitions)": len(fused)} if fused else {}),
+        partition_count=len(fused) or None,
+        node_basis="as_executed",
+        analysis_graph_optimization=graph_optimization,
+    )

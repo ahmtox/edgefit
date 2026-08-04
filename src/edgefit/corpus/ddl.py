@@ -82,6 +82,9 @@ CREATE TABLE IF NOT EXISTS measurements (
     fallback_node_pct     DOUBLE,
     fallback_flops_pct    DOUBLE,
     fallback_time_pct     DOUBLE,
+    as_run_node_pct       DOUBLE,
+    as_run_time_pct       DOUBLE,
+    as_run_partitions     INTEGER,
 
     power_source          VARCHAR NOT NULL,
     low_power_mode        BOOLEAN,

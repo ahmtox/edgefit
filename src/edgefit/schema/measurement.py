@@ -25,7 +25,9 @@ from edgefit.schema.host import DeviceFingerprint, HostState
 
 # v2 adds stress_profile (PROJECT.md §6.2, §9 step 2: "from day one").
 # v3 adds output_cosine_vs_reference, so the quantization axis carries a cost column.
-MEASUREMENT_SCHEMA_VERSION = 3
+# v4 adds fallback_as_run, because the partition analysed at graph-opt `disabled`
+# is measurably not the partition executed at the configured level.
+MEASUREMENT_SCHEMA_VERSION = 4
 
 # PROJECT.md §14.2. Not a suggestion, and not configurable downwards.
 MIN_RUNS = 5
@@ -151,6 +153,16 @@ class FallbackReport(_Frozen):
         description=(
             "Contiguous subgraphs handed to the accelerator. Fragmentation is its own "
             "performance story: 31 partitions means 31 round trips, however good the ratio looks."
+        ),
+    )
+
+    node_basis: str = Field(
+        default="as_authored",
+        description=(
+            "What nodes_total counts. 'as_authored' is the original ONNX graph, which "
+            "makes unclaimed_op_types actionable. 'as_executed' is the post-fusion node "
+            "set ORT actually ran, where original node names no longer exist and so "
+            "FLOP attribution is withheld rather than guessed."
         ),
     )
 
@@ -280,7 +292,24 @@ class MeasurementRecord(_Frozen):
     warmup_count: int = Field(ge=0)
 
     metrics: Metrics | None = None
-    fallback: FallbackReport | None = None
+    fallback: FallbackReport | None = Field(
+        default=None,
+        description=(
+            "Partition of the graph *as authored*, analysed with ORT graph optimisation "
+            "disabled so node names still map to the user's model. This is the report "
+            "that tells them which ops to fix."
+        ),
+    )
+    fallback_as_run: FallbackReport | None = Field(
+        default=None,
+        description=(
+            "Partition of the graph *as actually executed*, at this recipe's optimisation "
+            "level. Measured because the two differ materially: on ViT-base, graph "
+            "optimisation cut CPU nodes from 244 to 86 and raised CoreML's time share "
+            "from 53.7% to 81.5%. Node names do not survive fusion, so this report "
+            "carries time share and partition count but no FLOP attribution."
+        ),
+    )
     notes: str | None = None
 
     @model_validator(mode="after")

@@ -156,6 +156,7 @@ class CorpusStore:
         ttft = metrics.ttft_ms if metrics else None
         decode = metrics.decode_tok_s if metrics else None
         fallback = record.fallback
+        as_run = record.fallback_as_run
         probe = record.calibration_probe
 
         self._conn.execute(
@@ -170,6 +171,7 @@ class CorpusStore:
                 $peak_rss_bytes, $artifact_bytes, $lowering_ms,
                 $accuracy, $accuracy_delta_vs_fp16, $output_cosine_vs_reference, $power_mw,
                 $fallback_node_pct, $fallback_flops_pct, $fallback_time_pct,
+                $as_run_node_pct, $as_run_time_pct, $as_run_partitions,
                 $power_source, $low_power_mode, $thermal_state, $load_avg_1m,
                 $calibration_ratio, $payload
             )
@@ -212,6 +214,9 @@ class CorpusStore:
                 "fallback_node_pct": fallback.fallback_node_pct if fallback else None,
                 "fallback_flops_pct": fallback.fallback_flops_pct if fallback else None,
                 "fallback_time_pct": fallback.fallback_time_pct if fallback else None,
+                "as_run_node_pct": as_run.fallback_node_pct if as_run else None,
+                "as_run_time_pct": as_run.fallback_time_pct if as_run else None,
+                "as_run_partitions": as_run.partition_count if as_run else None,
                 "power_source": str(record.host_state.power_source),
                 "low_power_mode": record.host_state.low_power_mode,
                 "thermal_state": str(record.host_state.thermal_state),

@@ -2,6 +2,7 @@
 
 from edgefit.backends.analysis.ep_placement import (
     KernelEvent,
+    build_as_run_report,
     build_fallback_report,
     parse_profile,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "FLOPS_ESTIMATOR_VERSION",
     "FlopsTable",
     "KernelEvent",
+    "build_as_run_report",
     "build_fallback_report",
     "estimate_flops",
     "fingerprint_onnx",

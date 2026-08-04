@@ -166,6 +166,11 @@ def _analyze_in_subprocess(artifact_dir: Path, recipe: Recipe) -> StaticAnalysis
         fallback=(
             FallbackReport.model_validate(payload["fallback"]) if payload.get("fallback") else None
         ),
+        fallback_as_run=(
+            FallbackReport.model_validate(payload["fallback_as_run"])
+            if payload.get("fallback_as_run")
+            else None
+        ),
     )
 
 
@@ -226,6 +231,7 @@ def _failure_record(
         warmup_count=warmup,
         metrics=metrics,
         fallback=analysis.fallback if analysis else None,
+        fallback_as_run=analysis.fallback_as_run if analysis else None,
     )
 
 
@@ -330,6 +336,7 @@ def measure(
                 unavailable=_unavailable_on_this_host(),
             ),
             fallback=analysis.fallback,
+            fallback_as_run=analysis.fallback_as_run,
             notes=notes,
         )
 

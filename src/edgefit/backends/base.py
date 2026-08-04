@@ -35,6 +35,7 @@ class StaticAnalysis:
     failure_reason: str | None = None
     fingerprint: GraphFingerprint | None = None
     fallback: FallbackReport | None = None
+    fallback_as_run: FallbackReport | None = None
     lowering_ms: float | None = None
 
 
