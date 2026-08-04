@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS measurements (
     os_version            VARCHAR NOT NULL,
     os_build              VARCHAR NOT NULL,
 
+    measurement_source    VARCHAR NOT NULL,
+    source_detail         VARCHAR,
+    reported_latency_ms   DOUBLE,
     stress_profile        VARCHAR NOT NULL,
     outcome               VARCHAR NOT NULL,
     failure_reason        VARCHAR,

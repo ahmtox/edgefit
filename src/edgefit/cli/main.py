@@ -374,6 +374,111 @@ def sweep(
         raise typer.Exit(code=1)
 
 
+devices_app = typer.Typer(help="Device inventory and fleet resolution.", no_args_is_help=True)
+app.add_typer(devices_app, name="devices")
+
+
+@devices_app.command("list")
+def devices_list(
+    reachable_only: Annotated[
+        bool, typer.Option("--reachable", help="Only devices we can actually measure on today.")
+    ] = False,
+) -> None:
+    """What we can target, and what we can actually reach."""
+    from edgefit.devices import combined_inventory  # noqa: PLC0415
+
+    inventory = combined_inventory()
+    devices = inventory.reachable if reachable_only else inventory.devices
+
+    title = f"Inventory ({len(inventory.reachable)} of {len(inventory.devices)} reachable)"
+    table = Table(title=title, header_style="bold")
+    for column in ("source", "device", "SoC", "OS", "accel", "reach"):
+        table.add_column(column, overflow="fold")
+    for device in sorted(devices, key=lambda d: (d.source, d.soc, d.name)):
+        table.add_row(
+            device.source,
+            device.name,
+            device.soc,
+            f"{device.os_name} {device.os_version}",
+            device.accelerator or "—",
+            "[green]yes[/green]" if device.reachable else "[yellow]no[/yellow]",
+        )
+    console.print(table)
+    for note in inventory.notes:
+        console.print(f"\n[yellow]![/yellow] {note}")
+
+
+@devices_app.command("refresh")
+def devices_refresh() -> None:
+    """Re-fetch the Qualcomm AI Hub catalogue into the local cache."""
+    from edgefit.devices import refresh_qai_hub_cache  # noqa: PLC0415
+
+    try:
+        count = refresh_qai_hub_cache()
+    except ImportError:
+        console.print("[red]qai-hub is not installed[/red] — pip install qai-hub")
+        raise typer.Exit(code=1) from None
+    except Exception as exc:  # noqa: BLE001 - a vendor outage is not a crash
+        console.print(f"[red]refresh failed[/red]: {exc}")
+        raise typer.Exit(code=1) from None
+    console.print(f"{_OK}  cached {count} devices")
+
+
+@app.command()
+def fleet(
+    path: Annotated[Path, typer.Argument(help="Device-distribution CSV: 'SM8650,22%' per line.")],
+) -> None:
+    """Resolve a customer's fleet against inventory (PROJECT.md §4 Stage 2, input #2).
+
+    Reports two numbers, never one: how much of the fleet we recognise, and how much
+    we can measure on today. Quoting only the first would be a sales document.
+    """
+    from edgefit.devices import combined_inventory, load_fleet, suggest_aliases  # noqa: PLC0415
+
+    inventory = combined_inventory()
+    coverage = load_fleet(path, inventory)
+    if not coverage.targets:
+        console.print("[red]no usable rows[/red] — expected lines like 'SM8650,22%'")
+        raise typer.Exit(code=1)
+
+    table = Table(title="Fleet coverage", header_style="bold")
+    for column in ("SoC", "share", "status", "devices"):
+        table.add_column(column, overflow="fold")
+    for target in coverage.targets:
+        colour = {"reachable": "green", "known but unreachable": "yellow", "unknown": "red"}[
+            target.status
+        ]
+        names = ", ".join(d.name for d in target.devices[:2]) or "—"
+        if len(target.devices) > 2:
+            names += f" (+{len(target.devices) - 2})"
+        table.add_row(
+            target.entry.soc,
+            f"{target.entry.share:.1f}%",
+            f"[{colour}]{target.status}[/{colour}]",
+            names,
+        )
+    console.print(table)
+
+    console.print(
+        f"\n[bold]{coverage.covered_share:.0f}%[/bold] of the stated fleet is in inventory · "
+        f"[bold]{coverage.reachable_share:.0f}%[/bold] is measurable today"
+    )
+    if abs(coverage.total_share - 100) > 1:
+        console.print(
+            f"[dim]stated shares sum to {coverage.total_share:.1f}%, not 100 — "
+            f"reported as given, not normalised[/dim]"
+        )
+    for target in coverage.unknown:
+        hints = suggest_aliases(target.entry, inventory)
+        hint = f" — did you mean {', '.join(hints)}?" if hints else ""
+        console.print(f"[red]![/red] {target.entry.soc} is not in inventory{hint}")
+    if coverage.unreachable:
+        console.print(
+            f"\n[yellow]{len(coverage.unreachable)} SoC(s) are catalogued but not "
+            f"provisionable.[/yellow] {inventory.notes[0] if inventory.notes else ''}"
+        )
+
+
 atlas_app = typer.Typer(help="Build the public benchmark atlas.", no_args_is_help=True)
 app.add_typer(atlas_app, name="atlas")
 

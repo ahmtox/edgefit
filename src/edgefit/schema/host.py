@@ -22,14 +22,17 @@ class _Frozen(BaseModel):
 class DeviceFingerprint(_Frozen):
     """Identity of the physical unit. Every measurement carries one."""
 
-    kind: str = Field(description="host | phone | tablet | sbc | virtual")
+    kind: str = Field(description="host | phone | tablet | sbc | hosted")
     model: str = Field(description="e.g. Mac14,2, SM-S928B")
     soc: str = Field(description="e.g. Apple M2, SM8650")
     arch: str
-    cpu_cores_total: int
+    # Optional because a hosted device farm does not expose them. Required-looking
+    # fields that a second device class cannot fill are how an abstraction gets
+    # quietly falsified; PROJECT.md §9.5 exists to find exactly this.
+    cpu_cores_total: int | None = None
     cpu_cores_performance: int | None = None
     cpu_cores_efficiency: int | None = None
-    ram_bytes: int
+    ram_bytes: int | None = None
     os_name: str
     os_version: str
     os_build: str = Field(description="Exact build. OS updates silently change delegates.")

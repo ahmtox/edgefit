@@ -165,6 +165,7 @@ class CorpusStore:
                 $measurement_id, $schema_version, $harness_version, $created_at,
                 $recipe_id, $model_ref, $graph_fingerprint_id,
                 $device_id, $sku_id, $device_model, $soc, $os_name, $os_version, $os_build,
+                $measurement_source, $source_detail, $reported_latency_ms,
                 $stress_profile, $outcome, $failure_reason, $run_count, $warmup_count,
                 $latency_p50_ms, $latency_p95_ms, $latency_cv,
                 $ttft_p50_ms, $decode_tok_s_p50, $sustained_tok_s_5min,
@@ -191,6 +192,11 @@ class CorpusStore:
                 "os_name": record.device.os_name,
                 "os_version": record.device.os_version,
                 "os_build": record.device.os_build,
+                "measurement_source": str(record.measurement_source),
+                "source_detail": record.source_detail,
+                "reported_latency_ms": (
+                    metrics.reported_latency_ms if metrics else None
+                ),
                 "stress_profile": str(record.stress_profile),
                 "outcome": str(record.outcome),
                 "failure_reason": record.failure_reason,

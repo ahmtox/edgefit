@@ -35,6 +35,11 @@ export = [
     "torch>=2.4",
     "transformers>=4.44",
 ]
+# Qualcomm AI Hub client, for refreshing the hosted device catalogue. Optional:
+# the inventory reads a cached copy, so nothing in the core path needs it.
+qai-hub = [
+    "qai-hub>=0.54",
+]
 
 [project.scripts]
 edgefit = "edgefit.cli.main:app"

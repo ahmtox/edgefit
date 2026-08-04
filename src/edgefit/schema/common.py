@@ -107,6 +107,26 @@ class StressProfile(StrEnum):
     THERMAL_SOAK = "thermal_soak"
     MEMORY_PRESSURE = "memory_pressure"
     CONCURRENT_LOAD = "concurrent_load"
+    # A third party ran it on hardware we do not control and did not tell us the
+    # conditions. Honest, and filterable.
+    UNKNOWN = "unknown"
+
+
+class MeasurementSource(StrEnum):
+    """Who produced the number.
+
+    This distinction is load-bearing. Our own measurements are taken by our harness,
+    behind our gate, with n>=5 raw samples and variance we computed. A figure a
+    vendor's service reports is a different kind of object: their harness, their run
+    count, their conditions, none of which we can verify.
+
+    Putting both in one latency column without a label would be exactly the quiet
+    dishonesty this project exists to avoid, so hard rule #2 is enforced only against
+    our own measurements and third-party rows must say what they are.
+    """
+
+    EDGEFIT = "edgefit"
+    THIRD_PARTY = "third_party"
 
 
 class PowerSource(StrEnum):

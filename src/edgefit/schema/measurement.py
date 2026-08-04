@@ -20,14 +20,16 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from edgefit.schema.common import Outcome, StressProfile, content_hash
+from edgefit.schema.common import MeasurementSource, Outcome, StressProfile, content_hash
 from edgefit.schema.host import DeviceFingerprint, HostState
 
 # v2 adds stress_profile (PROJECT.md §6.2, §9 step 2: "from day one").
 # v3 adds output_cosine_vs_reference, so the quantization axis carries a cost column.
 # v4 adds fallback_as_run, because the partition analysed at graph-opt `disabled`
 # is measurably not the partition executed at the configured level.
-MEASUREMENT_SCHEMA_VERSION = 4
+# v5 adds measurement_source, so a third party's reported figure can enter the
+# corpus without impersonating one of our own measurements.
+MEASUREMENT_SCHEMA_VERSION = 5
 
 # PROJECT.md §14.2. Not a suggestion, and not configurable downwards.
 MIN_RUNS = 5
@@ -211,6 +213,14 @@ class Metrics(_Frozen):
         default=None,
         description="Hard rule #4: pipeline cost counts, not just kernel time.",
     )
+    reported_latency_ms: float | None = Field(
+        default=None,
+        description=(
+            "A point estimate a third party reported, deliberately NOT latency_ms. "
+            "Kept in its own field so no query can accidentally average someone "
+            "else's aggregate together with our measured distributions."
+        ),
+    )
 
     # Generative (PROJECT.md §4 Stage 1 atlas columns)
     ttft_ms: RunStats | None = None
@@ -277,6 +287,19 @@ class MeasurementRecord(_Frozen):
     host_state: HostState
     calibration_probe: CalibrationProbe | None = None
 
+    measurement_source: MeasurementSource = Field(
+        default=MeasurementSource.EDGEFIT,
+        description="Who produced the number. See MeasurementSource.",
+    )
+    source_detail: str | None = Field(
+        default=None,
+        description=(
+            "Required for third-party rows: who reported it, with what tool and version, "
+            "and what they actually reported. Without this a borrowed number is "
+            "unattributable and therefore worthless."
+        ),
+    )
+
     stress_profile: StressProfile = Field(
         default=StressProfile.CLEAN,
         description=(
@@ -314,21 +337,40 @@ class MeasurementRecord(_Frozen):
 
     @model_validator(mode="after")
     def _enforce_hard_rules(self) -> MeasurementRecord:
+        third_party = self.measurement_source is MeasurementSource.THIRD_PARTY
+        if third_party and not (self.source_detail or "").strip():
+            raise ValueError(
+                "a third-party row must name its source in source_detail — an "
+                "unattributable borrowed number is worthless"
+            )
+
         if self.outcome is Outcome.SUCCESS:
             if self.metrics is None:
                 raise ValueError("a successful measurement must carry metrics")
             stats = self.metrics.primary_stats
-            if stats is None:
+            if third_party:
+                # Hard rule #2 governs *our* measurements. A vendor service that
+                # reports one aggregate figure has not given us five samples, and
+                # inventing a distribution to satisfy the validator would be exactly
+                # the fabrication rule #1 forbids. So the requirement becomes: say
+                # plainly that variance is absent and why.
+                if stats is None and "latency_ms" not in self.metrics.unavailable:
+                    raise ValueError(
+                        "a third-party row without a timing distribution must explain "
+                        "its absence in metrics.unavailable['latency_ms']"
+                    )
+            elif stats is None:
                 raise ValueError(
                     "a successful measurement must carry a timing distribution "
                     "(PROJECT.md §14.2: without variance the record is invalid)"
                 )
-            if stats.n < MIN_RUNS:
-                raise ValueError(f"run_count {stats.n} is below the minimum of {MIN_RUNS}")
-            if self.run_count != stats.n:
-                raise ValueError(
-                    f"run_count={self.run_count} disagrees with {stats.n} timing samples"
-                )
+            if stats is not None:
+                if stats.n < MIN_RUNS:
+                    raise ValueError(f"run_count {stats.n} is below the minimum of {MIN_RUNS}")
+                if self.run_count != stats.n:
+                    raise ValueError(
+                        f"run_count={self.run_count} disagrees with {stats.n} timing samples"
+                    )
         elif not (self.failure_reason or "").strip():
             raise ValueError(f"outcome {self.outcome!r} requires a failure_reason")
         return self
