@@ -5,10 +5,12 @@ engine would add a dependency and an indirection for no expressive gain.
 
 Two editorial rules run through every page:
 
-1. **Provenance is visible, not buried.** Every page states that these numbers come
-   from a single laptop-class unit with no second unit to cross-check. Publishing
-   laptop numbers dressed as lab numbers would destroy the only asset the project
-   has (PROJECT.md §13, measurement trust).
+1. **Provenance is visible, not buried, and computed rather than asserted.** Every
+   page states where its numbers came from and under what conditions — derived from
+   the corpus, because the banner was once a constant claiming a laptop gate and went
+   false the moment hosted rows landed. Publishing laptop numbers dressed as lab
+   numbers, or someone else's numbers dressed as ours, would destroy the only asset
+   the project has (PROJECT.md §13, measurement trust).
 2. **Failures are shown.** §5.9 makes them data. An atlas that only lists what
    worked is the atlas every vendor already publishes.
 """
@@ -78,17 +80,50 @@ Corpus is append-only and immutable: a re-measurement is a new row, never an edi
 """
 
 
-PROVENANCE = """
-<div class="banner">
-<strong>Read this before citing anything here.</strong>
-<p>Every number below was measured on <em>one</em> laptop-class machine, gated for AC
-power, low-power mode off, nominal thermal state and verified available compute — but
-there is no second unit of the same SKU to cross-check against, so the
-<a href="{up}methodology.html#two-unit">two-unit test</a> has not been run. Treat these
-as dev-grade figures that are honest about their own conditions, not as lab results.
-Laptop thermals also differ from a rack-mounted machine.</p>
-</div>
-"""
+_OURS = """<p>{count} of them {verb} measured by us on <em>one</em> laptop-class
+machine, gated for AC power, low-power mode off, nominal thermal state and verified
+available compute — but there is no second unit of the same SKU to cross-check
+against, so the <a href="{up}methodology.html#two-unit">two-unit test</a> has not been
+run. Treat those as dev-grade figures that are honest about their own conditions, not
+as lab results. Laptop thermals also differ from a rack-mounted machine.</p>"""
+
+_HOSTED = """<p>{count} {verb} measured on <strong>Qualcomm AI Hub</strong>'s hosted
+phones, marked <span class="thirdparty">3P</span> throughout. Our own gating does not
+apply to them: their thermal state is not exposed, the run count is theirs, and their
+timing excludes model load and host-side framework overhead, so those rows read faster
+than ours by an unknown margin. See
+<a href="{up}methodology.html#thirdparty">what we do and do not know about them</a>.</p>"""
+
+
+def provenance(rows: list[Row], *, up: str = "") -> str:
+    """The banner, computed from the corpus rather than asserted.
+
+    It used to be a constant reading "Every number below was measured on *one*
+    laptop-class machine, gated for AC power…". True when written, and false the moment
+    hosted rows landed — at which point the site's most prominent honesty statement was
+    claiming a gate that had never run on any row it described. A provenance claim that
+    cannot go stale is one derived from the data it describes.
+    """
+    ours = sum(1 for row in rows if row.is_ours)
+    hosted = len(rows) - ours
+    body = ['<strong>Read this before citing anything here.</strong>']
+    body.append(
+        f"<p>These {len(rows)} measurements do not all come from the same place, and the "
+        "conditions behind them differ.</p>"
+        if ours and hosted
+        else ""
+    )
+    if ours:
+        body.append(_OURS.format(count=ours, verb="was" if ours == 1 else "were", up=up))
+    if hosted:
+        body.append(
+            _HOSTED.format(
+                count=f"{hosted} row" + ("" if hosted == 1 else "s"),
+                verb="was" if hosted == 1 else "were",
+                up=up,
+            )
+        )
+    return f'<div class="banner">{"".join(body)}</div>'
 
 
 def _tiles(summary: Summary) -> str:
@@ -191,7 +226,7 @@ def index(summary: Summary, rows: list[Row], models: list[Model]) -> str:
     task_options = "".join(f'<option value="{escape(t)}">{escape(t)}</option>' for t in tasks)
 
     body = [
-        PROVENANCE.format(up=""),
+        provenance(rows),
         _tiles(summary),
         "<h2>The matrix</h2>",
         "<p>Every measurement in the corpus, successes and failures together. "
@@ -775,7 +810,7 @@ def methodology_page(summary: Summary, rows: list[Row]) -> str:
     runs = min((row.run_count for row in measured), default=0)
 
     body = f"""
-{PROVENANCE.format(up="")}
+{provenance(rows)}
 <h2>Methodology</h2>
 <p>This page exists so you can decide how much to trust the numbers without taking
 our word for anything. Where a claim can be checked against the data, the data is

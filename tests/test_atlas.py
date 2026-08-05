@@ -393,6 +393,23 @@ class TestThirdPartyRows:
             "no within-device accelerator pair exists here, so no verdict should appear"
         )
 
+    def test_the_banner_does_not_claim_our_gate_over_hosted_rows(
+        self, hosted, tmp_path
+    ) -> None:
+        """The banner was a constant, and constants go stale.
+
+        It read "Every number below was measured on *one* laptop-class machine, gated
+        for AC power…" — true when written, false as soon as any hosted row existed. On
+        a corpus with no rows of ours it claimed a gate that had run on nothing it
+        described, in the site's most prominent honesty statement.
+        """
+        build(hosted, tmp_path / "site")
+        for name in ("index.html", "methodology.html"):
+            text = (tmp_path / "site" / name).read_text()
+            assert "laptop-class" not in text, f"{name} claims a laptop measured a hosted row"
+            assert "Qualcomm AI Hub" in text
+            assert "thermal state is not exposed" in text
+
     def test_methodology_scopes_its_claims(self, hosted, tmp_path) -> None:
         """Our gate and thermal probe say nothing about someone else's rack."""
         build(hosted, tmp_path / "site")
