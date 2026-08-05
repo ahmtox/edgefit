@@ -23,9 +23,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import onnx
 
 from edgefit.models.registry import ModelSpec
 from edgefit.schema.common import content_hash
+
+
+class ExportError(RuntimeError):
+    """The export produced something the harness cannot honestly measure."""
+
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/onnx")
 DEFAULT_OPSET = 17
@@ -39,7 +45,11 @@ DEFAULT_OPSET = 17
 #: v3 records head and layer counts in meta.json. Missing this bump left dynamic-shape
 #: and quantized artifacts carrying pre-fix sidecars, so the same model fingerprinted
 #: as both `mha` and `unknown` depending on which artifact a row happened to use.
-EXPORTER_VERSION = 3
+#:
+#: v4 filters harness inputs by what the model's forward accepts and reconciles
+#: inputs.npz against the exported graph, so a tokenizer emitting more than the model
+#: takes can no longer put an unusable tensor in the artifact.
+EXPORTER_VERSION = 4
 
 #: Files the harness writes alongside the model; not part of the shipped artifact.
 HARNESS_SIDECARS = frozenset({"inputs.npz", "reference.npz", "meta.json"})
@@ -150,6 +160,23 @@ def _load_hf_model(spec: ModelSpec):
     return model.eval()
 
 
+def _accepted_arguments(model) -> frozenset[str]:
+    """Keyword arguments this model's forward actually takes.
+
+    A model whose forward accepts ``**kwargs`` would swallow anything, so that case
+    reports "everything" and leaves the post-export reconciliation to catch mistakes.
+    """
+    import inspect  # noqa: PLC0415
+
+    try:
+        parameters = inspect.signature(model.forward).parameters
+    except (TypeError, ValueError):  # pragma: no cover - exotic callables
+        return frozenset({"input_ids", "attention_mask", "token_type_ids"})
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        return frozenset({"input_ids", "attention_mask", "token_type_ids"})
+    return frozenset(parameters)
+
+
 def _build_text(spec: ModelSpec):
     """Text model fed a fixed prompt padded to the static sequence length.
 
@@ -174,8 +201,18 @@ def _build_text(spec: ModelSpec):
         max_length=spec.static_shape["sequence"],
         truncation=True,
     )
+    # Two filters, because the tokenizer and the model disagree more often than they
+    # look like they should. `distilbert-base-uncased`'s tokenizer emits
+    # `token_type_ids`; `DistilBertModel.forward` does not accept it. Keying only on
+    # the tokenizer put a tensor in inputs.npz that the traced graph had pruned, and
+    # every recipe then failed at session creation with `Invalid input name:
+    # token_type_ids`. The registered toxic-comment DistilBERT never showed it —
+    # its tokenizer config omits the field — so six curated models hid the bug.
+    accepted = _accepted_arguments(model)
     names = [
-        name for name in ("input_ids", "attention_mask", "token_type_ids") if name in encoded
+        name
+        for name in ("input_ids", "attention_mask", "token_type_ids")
+        if name in encoded and name in accepted
     ]
     args = tuple(encoded[name] for name in names)
     output_attr = spec.output_attr
@@ -297,10 +334,21 @@ def export_onnx(
     )
     lowering_ms = (time.perf_counter() - started) * 1000.0
 
-    np.savez(
-        inputs_path,
-        **{name: tensor.numpy() for name, tensor in zip(input_names, args, strict=True)},
-    )
+    # The graph is the authority on what a session will accept, not our intent.
+    # torch.onnx.export prunes inputs the traced module never used, so a name we
+    # asked for can silently vanish — and every recipe then dies at session creation
+    # with `Invalid input name`, eleven identical failures for one export defect.
+    # Reconciling here turns that into one error, at the place that caused it.
+    tensors = dict(zip(input_names, args, strict=True))
+    graph_inputs = [value.name for value in onnx.load(str(model_path)).graph.input]
+    missing = [name for name in graph_inputs if name not in tensors]
+    if missing:
+        raise ExportError(
+            f"{spec.hf_id} exported a graph expecting {missing}, which the input "
+            f"harness did not build. Built: {sorted(tensors)}."
+        )
+    np.savez(inputs_path, **{name: tensors[name].numpy() for name in graph_inputs})
+    input_names = graph_inputs
     with torch.no_grad():
         reference = wrapper(*args)
     np.savez(reference_path, **{output_names[0]: reference.numpy()})

@@ -16,6 +16,10 @@ __version__ = "0.0.1"
 # which it is not, so every unconstrained row recorded 100% fallback while running
 # entirely on the NPU. The rows already written are wrong on a derived metric and
 # cannot be edited, so they are superseded by re-measurement under this version.
-HARNESS_VERSION = "0.3.4"
+# 0.3.5: EXPORTER_VERSION 3 → 4. The artifact is part of what gets measured, so an
+# exporter change must bump this too — resume keys on (device, harness_version), and
+# bumping only the exporter left 11 stale `lowering_failure` rows counting as "already
+# done" against a defect that had just been fixed.
+HARNESS_VERSION = "0.3.5"
 
 __all__ = ["__version__", "HARNESS_VERSION"]
