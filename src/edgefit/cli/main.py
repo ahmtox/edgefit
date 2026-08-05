@@ -490,7 +490,12 @@ def measure_remote_cmd(
     stress profile, because the harness and the device conditions are both theirs.
     """
     from edgefit.backends.artifacts import resolve_artifact  # noqa: PLC0415
-    from edgefit.harness.remote import RemoteMeasurementError, measure_remote  # noqa: PLC0415
+    from edgefit.harness.remote import (  # noqa: PLC0415
+        RemoteMeasurementError,
+        UnprofilableOnHostedService,
+        check_inputs_are_synthesizable,
+        measure_remote,
+    )
     from edgefit.schema.recipe import ModelRef, QaiHubRuntimeConfig, Recipe  # noqa: PLC0415
 
     spec = resolve(model)
@@ -507,6 +512,14 @@ def measure_remote_cmd(
             ),
         )
     console.print(f"artifact           {_OK} [dim]{artifact.size_bytes / 1024**2:.1f} MiB[/dim]")
+
+    # Once, not once per device: the answer is a property of the graph, and the
+    # message is the same on all of them.
+    try:
+        check_inputs_are_synthesizable(artifact.model_path)
+    except UnprofilableOnHostedService as exc:
+        console.print(f"\n[red]refusing to submit[/red] — {exc}")
+        raise typer.Exit(code=1) from exc
 
     ok = 0
     with CorpusStore(corpus) as store:
