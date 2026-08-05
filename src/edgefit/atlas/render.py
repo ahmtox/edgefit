@@ -756,6 +756,42 @@ coefficient of variation <strong>{median_cv:.1f}%</strong>, worst
 includes lazy kernel compilation and delegate model caching — a real cost, but a
 different one from steady-state latency.</p>
 
+<h3 id="thirdparty">Rows we did not measure ourselves</h3>
+<p>Some rows come from <strong>Qualcomm AI Hub</strong>, which runs a submitted model on
+real phones in its own racks. They are marked <abbr class="thirdparty"
+title="not our measurement">3P</abbr> wherever they appear, and the mark's tooltip
+names the job that produced them. Everything on this page about our gate, our thermal
+probe and our warmup policy describes <em>our</em> devices and says nothing about
+theirs.</p>
+<p>What is genuinely theirs, and therefore unknown to us:</p>
+<ul>
+<li><strong>Thermal state and device conditions.</strong> Not exposed. Recorded as
+    <span class="mono">stress_profile = unknown</span> rather than assumed to be a
+    quiet device. It is not a clean-bench row and does not claim to be.</li>
+<li><strong>The run count is theirs.</strong> AI Hub returns ~100 raw per-run samples,
+    so hard rule #2 is satisfied natively rather than waived — these are real
+    distributions, not a vendor's single headline figure. We discard the first three as
+    warmup, matching our own policy so the variance figures stay comparable.</li>
+<li><strong>The timing is not end-to-end.</strong> It is AI Hub's on-device inference
+    time, which excludes model load and host-side framework overhead. Hard rule #4 says
+    measure end-to-end, and this does not — so these rows read <em>faster</em> than
+    ours by an unknown margin, and a cross-vendor gap should not be read as purely a
+    hardware difference. Load times are recorded separately.</li>
+<li><strong>Artifact size is unknown.</strong> AI Hub compiles server-side, and compile
+    jobs are currently rejected for this account, so the deployed artifact is not
+    something we can weigh.</li>
+</ul>
+<p>One thing they give us that no silicon vendor publishes about a rival: per-node
+<span class="mono">compute_unit</span>, so silent fallback is measurable on a second
+vendor with the same method as the first.</p>
+<p>A caveat that cost us a pass: profile jobs <strong>synthesize their own random
+inputs</strong>. For a model taking float inputs that is harmless. For one taking
+integer <em>indices</em> — token ids, token types — a random value is out of bounds for
+the embedding it indexes, and the job fails with an error that looks like the device
+refusing the model. It is not. We now refuse to submit such models rather than record
+a failure against hardware that did nothing wrong, which is why the text models
+measured on our own devices have no Snapdragon rows here.</p>
+
 <h3 id="gate">The gate: we refuse rather than annotate</h3>
 <p>Before every measurement the host is checked, and if it fails the measurement does
 not happen. The refusal is itself recorded as a row. The reasoning is that a missing
