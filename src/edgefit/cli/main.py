@@ -185,6 +185,40 @@ def export(
         f"{_OK}  {artifact.directory}  "
         f"[dim]{artifact.size_bytes / 1024**2:.1f} MiB · {state}[/dim]"
     )
+    _warn_about_duplicate_weights(artifact.model_path)
+
+
+def _warn_about_duplicate_weights(model_path: Path) -> None:
+    """Unasked-for warning (§4 Stage 2.3): weights this export ships twice.
+
+    Printed at export because that is where it is actionable and free — nobody asked
+    the question, and on a device the bytes are an OTA budget, not a detail.
+    """
+    from edgefit.backends.analysis.weights import find_duplicate_initializers  # noqa: PLC0415
+
+    with console.status("checking for duplicated weights…"):
+        report = find_duplicate_initializers(model_path)
+    if not report.has_findings:
+        return
+
+    share = report.wasted_fraction
+    console.print(
+        f"\n[yellow]⚠[/yellow]  this export ships "
+        f"[bold]{report.wasted_bytes / 1024**2:.0f} MiB[/bold] of weights twice"
+        + (f" — {share:.1%} of its weight bytes" if share is not None else "")
+    )
+    for group in report.groups:
+        shape = "x".join(str(dim) for dim in group.dims)
+        console.print(
+            f"   {group.relation} · {group.dtype} {shape} · "
+            f"{group.bytes_each / 1024**2:.0f} MiB each"
+        )
+        for name in group.names:
+            console.print(f"     [dim]- {name}[/dim]")
+    console.print(
+        "   [dim]a tied weight the exporter un-tied. Those bytes ship and are counted "
+        "in artifact size.[/dim]"
+    )
 
 
 @app.command()
