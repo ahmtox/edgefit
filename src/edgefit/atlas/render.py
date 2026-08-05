@@ -291,38 +291,45 @@ def _headline_findings(models: list[Model]) -> str:
     and almost entirely a different phone — the same misattribution as quoting FLOP
     fallback for a graph that never ran, on the most prominent surface we have.
     """
-    lines = []
+    rows: list[tuple[float, str]] = []
     for model in models:
-        baseline = model.cpu_baseline
-        accel = next(
-            (
-                r
-                for r in model.successes
-                if r.provider_short != "CPU"
-                and r.weight_dtype is None
-                and baseline is not None
-                and r.device_slug == baseline.device_slug
-            ),
-            None,
-        )
-        if not (baseline and accel and baseline.p50_ms and accel.p50_ms):
-            continue
-        ratio = baseline.p50_ms / accel.p50_ms
-        verdict = (
-            f'<span class="win">{ratio:.2f}× faster</span>'
-            if ratio > 1
-            else f'<span class="lose">{1 / ratio:.2f}× slower</span>'
-        )
-        lines.append(
-            f"<tr><td><a href='models/{model.slug}.html'>{escape(model.name)}</a></td>"
-            f"<td class='dim'>{escape(model.task)}</td>"
-            + _cell(baseline.p50_ms)
-            + _cell(accel.p50_ms)
-            + f"<td class='num'>{verdict}</td>"
-            + _cell(accel.fb_flops_authored, 1, "%")
-            + _cell(accel.fb_time_as_run, 1, "%")
-            + "</tr>"
-        )
+        # One verdict per (model, device), not per model. Taking the first baseline a
+        # model had left the strongest result in the corpus off the front page
+        # entirely: ViT already had a Mac verdict, so its Snapdragon pair — where the
+        # NPU is 35× the same phone's CPU — was silently dropped.
+        for device_slug in sorted({row.device_slug for row in model.successes}):
+            on_device = [r for r in model.successes if r.device_slug == device_slug]
+            baseline = next(
+                (r for r in on_device if r.provider_short == "CPU" and r.weight_dtype is None),
+                None,
+            )
+            accel = next(
+                (r for r in on_device if r.provider_short != "CPU" and r.weight_dtype is None),
+                None,
+            )
+            if not (baseline and accel and baseline.p50_ms and accel.p50_ms):
+                continue
+            ratio = baseline.p50_ms / accel.p50_ms
+            verdict = (
+                f'<span class="win">{ratio:.2f}× faster</span>'
+                if ratio > 1
+                else f'<span class="lose">{1 / ratio:.2f}× slower</span>'
+            )
+            rows.append((
+                -ratio,
+                f"<tr><td><a href='models/{model.slug}.html'>{escape(model.name)}</a></td>"
+                f"<td class='dim'>{escape(model.task)}</td>"
+                f"<td><a href='devices/{accel.device_slug}.html'>{escape(accel.soc)}</a>"
+                f"{_source_mark(accel)}</td>"
+                + _cell(baseline.p50_ms)
+                + _cell(accel.p50_ms)
+                + f"<td class='num'>{verdict}</td>"
+                + _cell(accel.fb_flops_authored, 1, "%")
+                + _cell(accel.fb_time_as_run, 1, "%")
+                + "</tr>",
+            ))
+    # Biggest win first: the point of the table is which delegates earn their keep.
+    lines = [markup for _, markup in sorted(rows, key=lambda pair: pair[0])]
     if not lines:
         return ""
     return (
@@ -336,7 +343,7 @@ def _headline_findings(models: list[Model]) -> str:
         "device</em>. Comparing across devices would measure the two devices, not the "
         "delegate.</p>"
         '<div class="scroll"><table><thead><tr>'
-        "<th>Model</th><th>Task</th><th class='num'>CPU fp32</th>"
+        "<th>Model</th><th>Task</th><th>Device</th><th class='num'>CPU fp32</th>"
         "<th class='num'>accelerated</th><th class='num'>verdict</th>"
         "<th class='num'>FLOP fb (as authored)</th><th class='num'>time fb (as run)</th>"
         f"</tr></thead><tbody>{''.join(lines)}</tbody></table></div>"
