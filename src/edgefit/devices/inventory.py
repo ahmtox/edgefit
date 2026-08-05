@@ -125,11 +125,10 @@ def qai_hub_inventory(
     diffable in review, and does not make an atlas build depend on a vendor's
     uptime. ``edgefit devices refresh`` updates it.
 
-    ``reachable`` defaults to False: a catalogue entry is not capacity. As of
-    2026-08-04 the vendor will provision these devices, but we have no backend that
-    submits to them, so nothing here can produce a measurement today. See
-    :data:`QAI_HUB_BLOCKED` for the distinction — it is deliberate, because
-    "the vendor refuses" and "we haven't written it" call for different work.
+    ``reachable`` defaults to False because a catalogue entry is not capacity: a farm
+    can list a device our account cannot provision. ``combined_inventory`` passes True,
+    having verified we measure on these. See :data:`QAI_HUB_LIMITS` for what that
+    reachability does and does not include.
     """
     path = Path(cache_path)
     if not path.exists():
@@ -167,30 +166,42 @@ def qai_hub_inventory(
     return Inventory(devices=tuple(devices), notes=notes)
 
 
-#: Why AI Hub devices are listed but not reachable. Stated once, carried everywhere.
+#: What AI Hub reachability includes. Stated once, carried everywhere.
 #:
-#: Corrected 2026-08-04. This previously claimed a Qualcomm-side entitlement blocked
-#: provisioning. That was wrong: it generalised from ``submit_compile_job``, the one
-#: job type that is genuinely broken, to device access as a whole. Profile and
-#: inference jobs provision real hardware on this account and return raw per-run
-#: samples plus per-node NPU/CPU placement.
-QAI_HUB_BLOCKED = (
-    "Qualcomm AI Hub will provision these devices — profile and inference jobs reach "
-    "SUCCESS on this account, verified 2026-08-04 across six devices from Snapdragon "
-    "845 to 8 Elite. They are not reachable yet because the AI Hub measurement "
-    "backend is not implemented; this is our gap, not the vendor's. When it lands, "
-    "these become reachable for fp32 ONNX profiling only: compile jobs are still "
-    "rejected server-side, so no .tflite or QNN artifacts and therefore no "
-    "Qualcomm-side quantization or delegate axis. "
-    "Full diagnosis: docs/qai-hub-device-access.md"
+#: This constant has been wrong twice, in opposite directions. It first claimed a
+#: Qualcomm entitlement blocked provisioning (a generalisation from the one broken job
+#: type), then that our own backend was missing — which stayed after the backend
+#: shipped, so the inventory reported "1 of 80 reachable" on the day three of those
+#: devices wrote corpus rows. Reachability is a fact about the harness, and it has to
+#: move when the harness does.
+#: Reachable as of 2026-08-05, when the profile backend landed and wrote real rows on
+#: three of these devices. Kept as a *note* rather than an unreachability reason,
+#: because the limits are on what we can ask for, not on whether we can measure at all.
+QAI_HUB_LIMITS = (
+    "Qualcomm AI Hub devices are reachable: the profile backend measures on them and "
+    "writes third-party rows. Two limits travel with that. Compile jobs are still "
+    "rejected server-side, so recipes are fp32 ONNX only — no .tflite or QNN artifact, "
+    "and therefore no Qualcomm-side quantization or delegate axis; the one live recipe "
+    "axis is compute_unit. And profile jobs synthesize their own random inputs, so a "
+    "model with integer index inputs cannot be profiled at all and is refused rather "
+    "than failed against the device. Full diagnosis: docs/qai-hub-device-access.md"
 )
 
 
 def combined_inventory(cache_path: Path | str = QAI_HUB_CACHE) -> Inventory:
-    """Everything we know about, owned and hosted, with reachability marked."""
+    """Everything we know about, owned and hosted, with reachability marked.
+
+    Hosted devices were hardcoded unreachable with the reason "the AI Hub measurement
+    backend is not implemented". It is now, and the inventory reported "1 of 80
+    reachable" on the same day three of those devices produced corpus rows. Reachability
+    is a fact about the harness, so it has to move when the harness does.
+    """
     local = local_inventory()
-    hosted = qai_hub_inventory(cache_path, reachable=False, unreachable_reason=QAI_HUB_BLOCKED)
-    return Inventory(devices=local.devices + hosted.devices, notes=local.notes + hosted.notes)
+    hosted = qai_hub_inventory(cache_path, reachable=True, unreachable_reason=None)
+    return Inventory(
+        devices=local.devices + hosted.devices,
+        notes=local.notes + hosted.notes + (QAI_HUB_LIMITS,),
+    )
 
 
 def refresh_qai_hub_cache(cache_path: Path | str = QAI_HUB_CACHE) -> int:

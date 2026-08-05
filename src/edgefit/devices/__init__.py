@@ -10,7 +10,7 @@ from edgefit.devices.fleet import (
     suggest_aliases,
 )
 from edgefit.devices.inventory import (
-    QAI_HUB_BLOCKED,
+    QAI_HUB_LIMITS,
     Inventory,
     InventoryDevice,
     combined_inventory,
@@ -21,7 +21,7 @@ from edgefit.devices.inventory import (
 )
 
 __all__ = [
-    "QAI_HUB_BLOCKED",
+    "QAI_HUB_LIMITS",
     "FleetCoverage",
     "FleetEntry",
     "Inventory",
