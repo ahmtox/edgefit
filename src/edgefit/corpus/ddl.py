@@ -27,7 +27,10 @@ CREATE TABLE IF NOT EXISTS recipes (
     task               VARCHAR NOT NULL,
     runtime_kind       VARCHAR NOT NULL,
     intended_provider  VARCHAR NOT NULL,
-    providers          VARCHAR NOT NULL,
+    -- Nullable: an ONNX Runtime concept. On a hosted service we hand over a model
+    -- and the service schedules it, so there is no provider order we chose. NULL
+    -- says that; a denormalised compute unit here would read as control we lack.
+    providers          VARCHAR,
     weight_dtype       VARCHAR,
     weight_granularity VARCHAR,
     activation_quant   VARCHAR,

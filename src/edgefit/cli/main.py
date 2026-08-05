@@ -87,7 +87,7 @@ def recipes() -> None:
         table.add_row(
             str(path),
             recipe.label or "—",
-            " > ".join(str(p) for p in recipe.runtime.providers),
+            (recipe.provider_chain or "—").replace(",", " > "),
         )
     console.print(table)
 

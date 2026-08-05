@@ -19,12 +19,17 @@ from edgefit.schema import (
     HostState,
     MeasurementRecord,
     Metrics,
+    ModelRef,
     NormType,
     Outcome,
+    QaiHubComputeUnit,
+    QaiHubRuntimeConfig,
     Recipe,
     RunStats,
+    TaskType,
 )
 
+MINILM = "hf:sentence-transformers/all-MiniLM-L6-v2"
 SAMPLES = [4.81, 4.92, 5.03, 4.88, 5.21, 4.95]
 
 
@@ -159,6 +164,35 @@ class TestInsert:
         assert (soc, os_build, provider) == ("Apple M2", "24C101", "CPUExecutionProvider")
         assert p50 == pytest.approx(4.935)
         assert 0 < cv < 0.1
+
+    def test_every_runtime_variant_can_be_stored(self, store: CorpusStore) -> None:
+        """The store must not know what an ONNX Runtime provider list is.
+
+        It did: `insert_recipe` read `recipe.runtime.providers` directly, so the very
+        first hosted recipe crashed with `'QaiHubRuntimeConfig' object has no
+        attribute 'providers'` — after the device had been provisioned and the job
+        had run, which is the expensive place to find out. §9.5 exists because a
+        second runtime falsifies fields that look universal, and it did so on first
+        contact. Adding ExecuTorch must not require touching this file.
+        """
+        hosted = Recipe(
+            model=ModelRef(ref=MINILM, task=TaskType.EMBED),
+            runtime=QaiHubRuntimeConfig(
+                device_name="Samsung Galaxy S24 (Family)",
+                compute_unit=QaiHubComputeUnit.NPU,
+            ),
+        )
+        assert store.insert_recipe(hosted) == hosted.recipe_id
+
+        row = store.query(
+            "SELECT runtime_kind, intended_provider, providers FROM recipes"
+        ).fetchone()
+        assert row is not None
+        kind, intended, providers = row
+        assert (kind, intended) == ("qai_hub", "NPU")
+        # Null, not the compute unit: we never chose a provider order, and a query
+        # must not be able to read one as though we had.
+        assert providers is None
 
 
 class TestFingerprints:

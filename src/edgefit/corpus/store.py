@@ -154,7 +154,7 @@ class CorpusStore:
                 "task": str(recipe.model.task),
                 "runtime_kind": str(recipe.runtime.kind),
                 "intended_provider": recipe.intended_provider,
-                "providers": ",".join(str(p) for p in recipe.runtime.providers),
+                "providers": recipe.provider_chain,
                 "weight_dtype": str(quant.weight_dtype) if quant else None,
                 "weight_granularity": str(quant.weight_granularity) if quant else None,
                 "activation_quant": str(quant.activation_quant) if quant else None,

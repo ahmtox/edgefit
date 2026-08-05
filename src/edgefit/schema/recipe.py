@@ -207,6 +207,11 @@ class OrtRuntimeConfig(_Frozen):
                 return provider
         return OrtProvider.CPU
 
+    @property
+    def provider_chain(self) -> str | None:
+        """The priority order we handed the runtime, for display and queries."""
+        return ",".join(str(provider) for provider in self.providers)
+
 
 class QaiHubComputeUnit(StrEnum):
     """Compute units a Qualcomm AI Hub job may target, in its own vocabulary."""
@@ -250,6 +255,16 @@ class QaiHubRuntimeConfig(_Frozen):
     def intended_provider(self) -> str:
         """The unit this recipe is aiming at, for the fallback report."""
         return self.compute_unit.value.upper()
+
+    @property
+    def provider_chain(self) -> str | None:
+        """None: we never chose one.
+
+        AI Hub schedules the graph itself. Denormalising the compute unit into this
+        column would let a query treat "we asked for the NPU" as "we ordered NPU
+        then CPU", which is a claim about control we do not have.
+        """
+        return None
 
 
 # Discriminated on `kind`, so previously-serialised records still deserialise and
@@ -295,6 +310,16 @@ class Recipe(_Frozen):
     @property
     def intended_provider(self) -> str:
         return str(self.runtime.intended_provider)
+
+    @property
+    def provider_chain(self) -> str | None:
+        """The execution-provider priority order, or None where we did not pick it.
+
+        Read through the runtime rather than off it: `providers` is an ONNX Runtime
+        concept, and reaching into it directly is what made the corpus store crash on
+        the first hosted recipe it ever saw (§9.5, exactly as predicted).
+        """
+        return self.runtime.provider_chain
 
     @property
     def is_remote(self) -> bool:
