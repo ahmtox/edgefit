@@ -33,7 +33,9 @@ from __future__ import annotations
 
 import contextlib
 import statistics
+import time
 from collections import Counter
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,7 +52,12 @@ from edgefit.schema.common import (
 )
 from edgefit.schema.host import DeviceFingerprint, HostState
 from edgefit.schema.measurement import FallbackReport, MeasurementRecord, Metrics, RunStats
-from edgefit.schema.recipe import QaiHubComputeUnit, QaiHubRuntimeConfig, Recipe
+from edgefit.schema.recipe import (
+    ModelRef,
+    QaiHubComputeUnit,
+    QaiHubRuntimeConfig,
+    Recipe,
+)
 
 #: Leading samples discarded before aggregation.
 #:
@@ -545,3 +552,129 @@ def measure_remote(
         store.insert_recipe(recipe)
         store.insert_measurement(record)
     return record
+
+
+@dataclass
+class RemoteSweepReport:
+    """Outcome of a hosted sweep. Mirrors the local one so the two read alike."""
+
+    cells: int = 0
+    measured: int = 0
+    failed: int = 0
+    resumed: int = 0
+    refused: int = 0
+    elapsed_s: float = 0.0
+
+    @property
+    def attempted(self) -> int:
+        return self.cells - self.resumed
+
+
+def _already_measured(store: CorpusStore, recipe_id: str) -> bool:
+    """Whether this exact cell already has a row at this harness version.
+
+    Keyed on ``recipe_id`` alone, which is enough here and is not for local rows: a
+    hosted recipe carries its own ``device_name`` and ``compute_unit``, so the hash
+    already identifies the (model, device, unit) cell. The local path keys on
+    ``device_id`` because one recipe is measured on many machines.
+
+    ``device_id`` could not be used even if we wanted to — it hashes the fingerprint,
+    which for a hosted device only exists after the job has run, which is the cost
+    resuming is meant to avoid.
+    """
+    row = store.query(
+        "SELECT 1 FROM measurements WHERE recipe_id = ? AND harness_version = ? "
+        "AND outcome <> 'gate_refused' LIMIT 1",
+        [recipe_id, HARNESS_VERSION],
+    ).fetchone()
+    return row is not None
+
+
+def sweep_remote(
+    model_refs: Sequence[str],
+    device_names: Sequence[str],
+    *,
+    store: CorpusStore,
+    compute_unit: QaiHubComputeUnit = QaiHubComputeUnit.ALL,
+    resume: bool = True,
+    on_event: Callable[[str, str, str], None] | None = None,
+) -> RemoteSweepReport:
+    """Profile every (model, device) cell on hosted hardware, recording every outcome.
+
+    The hosted twin of ``run_sweep``, and deliberately not the same function: there is
+    no gate, no thermal wait and no host lock, because none of those describe someone
+    else's rack. What it keeps is the part that matters — resumption, and a row for
+    every outcome including the failures.
+
+    Models are checked once before any device is spent. A model a hosted profiler
+    cannot feed is a property of the graph, not of the hardware, so discovering it
+    thirty jobs in would waste thirty provisions to learn one fact.
+    """
+    from edgefit.backends.artifacts import resolve_artifact  # noqa: PLC0415
+    from edgefit.models.registry import resolve  # noqa: PLC0415
+
+    report = RemoteSweepReport()
+    started = time.monotonic()
+
+    def emit(kind: str, cell: str, detail: str = "") -> None:
+        if on_event is not None:
+            on_event(kind, cell, detail)
+
+    usable: list[tuple[str, object, Path]] = []
+    for ref in model_refs:
+        spec = resolve(ref)
+        recipe = Recipe(
+            model=ModelRef(ref=spec.ref, task=spec.task),
+            runtime=QaiHubRuntimeConfig(device_name=device_names[0], compute_unit=compute_unit),
+            lowering={"static_shapes": spec.exporter != "decoder"},
+        )
+        artifact = resolve_artifact(spec, recipe)
+        try:
+            check_inputs_are_synthesizable(artifact.model_path)
+        except UnprofilableOnHostedService as exc:
+            # Not a row: nothing about any device was learned. See the refusal's own
+            # docstring for why this must not be recorded against the hardware.
+            report.refused += 1
+            emit("unprofilable", ref, str(exc))
+            continue
+        usable.append((ref, spec, artifact.directory))
+
+    for ref, spec, artifact_dir in usable:
+        for name in device_names:
+            cell = f"{ref.removeprefix('hf:')} × {name}"
+            report.cells += 1
+            recipe = Recipe(
+                model=ModelRef(ref=spec.ref, task=spec.task),
+                runtime=QaiHubRuntimeConfig(device_name=name, compute_unit=compute_unit),
+                lowering={"static_shapes": spec.exporter != "decoder"},
+            )
+            if resume and _already_measured(store, recipe.recipe_id):
+                report.resumed += 1
+                emit("resumed", cell)
+                continue
+
+            emit("submitting", cell)
+            try:
+                record = measure_remote(recipe, artifact_dir, store=store)
+            except RemoteMeasurementError as exc:
+                # Never submitted — no row, because no device reported anything.
+                report.failed += 1
+                emit("not-submitted", cell, str(exc))
+                continue
+
+            if record.outcome is Outcome.SUCCESS:
+                report.measured += 1
+                stats = record.metrics.latency_ms  # type: ignore[union-attr]
+                fb = record.fallback_as_run
+                placement = (
+                    " · ".join(f"{u}:{n}" for u, n in sorted((fb.nodes_per_provider or {}).items()))
+                    if fb
+                    else "—"
+                )
+                emit("measured", cell, f"p50 {stats.p50:.2f} ms · cv {stats.cv:.1%} · {placement}")
+            else:
+                report.failed += 1
+                emit("failed", cell, (record.failure_reason or "")[:160])
+
+    report.elapsed_s = time.monotonic() - started
+    return report

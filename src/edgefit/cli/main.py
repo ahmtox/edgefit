@@ -603,6 +603,89 @@ def measure_remote_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("sweep-remote")
+def sweep_remote_cmd(
+    model: Annotated[
+        list[str] | None, typer.Option(help="Model refs. Repeatable. Omit for all vision models.")
+    ] = None,
+    device: Annotated[
+        list[str] | None, typer.Option(help="AI Hub device names. Repeatable.")
+    ] = None,
+    soc: Annotated[
+        list[str] | None,
+        typer.Option(help="Target every catalogued device with this SoC. Repeatable."),
+    ] = None,
+    compute_unit: Annotated[str, typer.Option(help="all, npu, gpu or cpu.")] = "all",
+    corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
+    resume: Annotated[bool, typer.Option(help="Skip cells already measured.")] = True,
+    log: Annotated[Path | None, typer.Option(help="Append every event as it happens.")] = None,
+) -> None:
+    """Profile models across many hosted devices.
+
+    Our preflight gate does not apply: this runs in someone else's rack, so there is
+    no thermal wait and no host contention. That makes it the one breadth axis whose
+    throughput does not depend on what this laptop is doing.
+    """
+    from edgefit.devices import combined_inventory  # noqa: PLC0415
+    from edgefit.harness.remote import sweep_remote  # noqa: PLC0415
+    from edgefit.schema.recipe import QaiHubComputeUnit  # noqa: PLC0415
+
+    names = list(device or [])
+    if soc:
+        wanted = {s.lower() for s in soc}
+        names += [
+            d.name
+            for d in combined_inventory().devices
+            if d.source == "qai_hub" and d.soc.lower() in wanted
+        ]
+    names = list(dict.fromkeys(names)) or list(DEFAULT_REMOTE_DEVICES)
+
+    refs = list(model or [])
+    if not refs:
+        # Vision only by default: a hosted profiler invents its own inputs, and an
+        # index input cannot be invented. Submitting text models would burn a
+        # provision each to relearn that.
+        refs = [r for r in known_refs() if resolve(r).exporter == "vision"]
+
+    console.print(
+        f"[bold]{len(refs)} model(s) × {len(names)} device(s)[/bold] "
+        f"= {len(refs) * len(names)} cells · unit {compute_unit}"
+    )
+    handle = log.open("a", buffering=1) if log else None
+
+    def on_event(kind: str, cell: str, detail: str) -> None:
+        if handle is not None:
+            handle.write(f"{datetime.now():%H:%M:%S} {kind:<14} {cell}  {detail}\n")
+        marks = {"measured": "[green]✓[/green]", "failed": "[red]✗[/red]",
+                 "resumed": "[dim]·[/dim]", "unprofilable": "[yellow]![/yellow]",
+                 "not-submitted": "[red]![/red]"}
+        if kind == "submitting":
+            return
+        console.print(f"  {marks.get(kind, ' ')} {cell:<52} {detail[:70]}")
+
+    try:
+        with CorpusStore(corpus) as store:
+            report = sweep_remote(
+                refs, names, store=store,
+                compute_unit=QaiHubComputeUnit(compute_unit),
+                resume=resume, on_event=on_event,
+            )
+            total = store.count("measurements")
+    finally:
+        if handle is not None:
+            handle.close()
+
+    summary = Table(show_header=False, box=None)
+    summary.add_row("measured", str(report.measured))
+    summary.add_row("failures recorded", str(report.failed))
+    summary.add_row("already done", str(report.resumed))
+    summary.add_row("models refused", str(report.refused))
+    summary.add_row("elapsed", f"{report.elapsed_s / 60:.1f} min")
+    summary.add_row("corpus", f"{total} rows")
+    console.print()
+    console.print(summary)
+
+
 devices_app = typer.Typer(help="Device inventory and fleet resolution.", no_args_is_help=True)
 app.add_typer(devices_app, name="devices")
 
