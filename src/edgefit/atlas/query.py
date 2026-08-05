@@ -165,10 +165,13 @@ class Device:
     model: str
     soc: str
     arch: str
-    cores_total: int
+    # Optional because a hosted farm does not expose them. Absent is rendered as
+    # unknown, never as zero: "0 GiB RAM" is a synthesized measurement value, and
+    # hard rule #1 forbids inventing one to keep a template simple.
+    cores_total: int | None
     cores_performance: int | None
     cores_efficiency: int | None
-    ram_bytes: int
+    ram_bytes: int | None
     os_name: str
     os_version: str
     os_build: str
@@ -428,10 +431,12 @@ def load_devices(store: CorpusStore, rows: list[Row]) -> list[Device]:
                 model=device.get("model", device_rows[0].device_model),
                 soc=device.get("soc", device_rows[0].soc),
                 arch=device.get("arch", "unknown"),
-                cores_total=device.get("cpu_cores_total", 0),
+                # `.get(key, default)` is not enough: a hosted fingerprint *has* these
+                # keys, set to null. The default only fires when the key is missing.
+                cores_total=device.get("cpu_cores_total") or None,
                 cores_performance=device.get("cpu_cores_performance"),
                 cores_efficiency=device.get("cpu_cores_efficiency"),
-                ram_bytes=device.get("ram_bytes", 0),
+                ram_bytes=device.get("ram_bytes") or None,
                 os_name=device.get("os_name", "unknown"),
                 os_version=device.get("os_version", device_rows[0].os_version),
                 os_build=device.get("os_build", device_rows[0].os_build),

@@ -132,6 +132,19 @@ _MATRIX_HEAD = """
 """
 
 
+def _ram(device) -> str:
+    """RAM, or an admission. A hosted farm does not report its devices' memory."""
+    if not device.ram_bytes:
+        return '<span class="dim">RAM not reported</span>'
+    return f"{device.ram_bytes / 1024**3:.0f} GiB RAM"
+
+
+def _ram_cell(device) -> str:
+    if not device.ram_bytes:
+        return '<span class="dim">—</span>'
+    return f"{device.ram_bytes / 1024**3:.0f} GiB"
+
+
 def _source_mark(row: Row) -> str:
     """Mark a row we did not measure ourselves.
 
@@ -511,7 +524,7 @@ def device_page(device: Device, depth: int = 1) -> str:
         )
         for row in sorted(successes, key=lambda r: r.p50_ms or 0)
     ]
-    cores = f"{device.cores_total} cores"
+    cores = f"{device.cores_total} cores" if device.cores_total else "core count unknown"
     if device.cores_performance and device.cores_efficiency:
         cores += f" ({device.cores_performance}P + {device.cores_efficiency}E)"
 
@@ -521,7 +534,7 @@ def device_page(device: Device, depth: int = 1) -> str:
         f'<div class="card">'
         f"<p><strong>{escape(device.model)}</strong> · {escape(device.soc)} · "
         f"{escape(device.arch)} · {escape(cores)} · "
-        f"{device.ram_bytes / 1024**3:.0f} GiB RAM</p>"
+        f"{_ram(device)}</p>"
         f"<p>{escape(device.os_name)} {escape(device.os_version)} "
         f"(build <span class='mono'>{escape(device.os_build)}</span>)</p>"
         f'<p class="dim">The OS build is part of this device\'s identity. An OS update '
@@ -534,9 +547,16 @@ def device_page(device: Device, depth: int = 1) -> str:
         "</figcaption></figure>",
         "<h3>What fits</h3>",
         f"<p>Largest artifact measured here is {largest:.0f} MiB against "
-        f"{device.ram_bytes / 1024**3:.0f} GiB of RAM. Peak resident memory is recorded "
-        f"per measurement in the table below; it is the child process's own high-water "
-        f"mark, so it is attributable to that recipe alone.</p>",
+        + (
+            f"{device.ram_bytes / 1024**3:.0f} GiB of RAM."
+            if device.ram_bytes
+            else "an unreported amount of RAM — this device's total memory is not "
+            "something the service exposes, so &ldquo;what fits&rdquo; cannot be "
+            "answered here."
+        )
+        + "<p>Peak resident memory is recorded per measurement in the table below; it "
+        "is the child process's own high-water mark, so it is attributable to that "
+        "recipe alone.</p>",
         '<div class="scroll"><table data-sortable><thead><tr>'
         "<th class='sortable'>Model</th><th class='sortable'>Recipe</th>"
         "<th class='sortable'>Outcome</th><th class='sortable num'>p50 ms</th>"
@@ -566,7 +586,7 @@ def devices_index(devices: list[Device], depth: int = 1) -> str:
         f"<tr><td><a href='{d.slug}.html'>{escape(d.name)}</a></td>"
         f"<td class='mono dim'>{escape(d.os_name)} {escape(d.os_version)} "
         f"({escape(d.os_build)})</td>"
-        f"<td class='num'>{d.ram_bytes / 1024**3:.0f} GiB</td>"
+        f"<td class='num'>{_ram_cell(d)}</td>"
         f"<td class='num'>{len([r for r in d.rows if r.ok])}</td></tr>"
         for d in devices
     )

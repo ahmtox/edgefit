@@ -244,6 +244,88 @@ class TestBuild:
                 assert marker not in text, f"{page.name} reaches out via {marker}"
 
 
+class TestThirdPartyRows:
+    """A hosted row must be visibly not ours, on the page as well as in the corpus.
+
+    The atlas loaded no provenance at all until AI Hub rows existed, so it would have
+    rendered a phone in someone else's rack identically to a gate-passed measurement on
+    a machine we control — breaking a recorded decision on the published page rather
+    than in the data.
+    """
+
+    @pytest.fixture
+    def hosted(self, tmp_path, host_state):
+        from edgefit.harness.remote import remote_host_state
+        from edgefit.schema import (
+            DeviceFingerprint,
+            MeasurementSource,
+            ModelRef,
+            QaiHubComputeUnit,
+            QaiHubRuntimeConfig,
+            Recipe,
+            StressProfile,
+            TaskType,
+        )
+
+        recipe = Recipe(
+            model=ModelRef(ref="hf:google/vit-base-patch16-224-in21k", task=TaskType.VISION),
+            runtime=QaiHubRuntimeConfig(
+                device_name="Samsung Galaxy S24 (Family)", compute_unit=QaiHubComputeUnit.NPU
+            ),
+        )
+        record = MeasurementRecord(
+            harness_version=HARNESS_VERSION,
+            recipe_id=recipe.recipe_id,
+            model_ref=recipe.model.ref,
+            device=DeviceFingerprint(
+                kind="hosted",
+                model="Samsung Galaxy S24 (Family)",
+                soc="sm8650",
+                arch="aarch64",
+                os_name="android",
+                os_version="14",
+                os_build="unknown",
+            ),
+            host_state=remote_host_state(),
+            measurement_source=MeasurementSource.THIRD_PARTY,
+            source_detail="Qualcomm AI Hub profile job jabc123; not end-to-end",
+            stress_profile=StressProfile.UNKNOWN,
+            outcome=Outcome.SUCCESS,
+            run_count=len(SAMPLES),
+            warmup_count=3,
+            metrics=Metrics(latency_ms=RunStats.from_samples(SAMPLES)),
+        )
+        with CorpusStore(tmp_path / "hosted.duckdb") as store:
+            store.insert_recipe(recipe)
+            store.insert_measurement(record)
+            yield store
+
+    def test_the_row_knows_it_is_not_ours(self, hosted) -> None:
+        row = load_rows(hosted)[0]
+        assert not row.is_ours
+        assert row.measurement_source == "third_party"
+
+    def test_reproduction_uses_the_remote_command(self, hosted) -> None:
+        """`measure --recipe <path>` cannot reproduce it: there is no recipe YAML."""
+        command = load_rows(hosted)[0].reproduce
+        assert command.startswith("uv run edgefit measure-remote")
+        assert '--device "Samsung Galaxy S24 (Family)"' in command
+        assert "no longer in the library" not in command
+
+    def test_the_page_marks_it_and_names_the_job(self, hosted, tmp_path) -> None:
+        build(hosted, tmp_path / "site")
+        index = (tmp_path / "site" / "index.html").read_text()
+        assert 'class="thirdparty"' in index
+        assert "jabc123" in index, "the mark must name the job that produced the number"
+
+    def test_methodology_scopes_its_claims(self, hosted, tmp_path) -> None:
+        """Our gate and thermal probe say nothing about someone else's rack."""
+        build(hosted, tmp_path / "site")
+        page = (tmp_path / "site" / "methodology.html").read_text()
+        assert "Rows we did not measure ourselves" in page
+        assert "not end-to-end" in page
+
+
 def test_quantized_graphs_are_reported_separately(
     tmp_path, device, host_state, cpu_recipe
 ) -> None:
