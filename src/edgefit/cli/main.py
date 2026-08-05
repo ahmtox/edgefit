@@ -73,6 +73,47 @@ def models() -> None:
         spec = resolve(ref)
         table.add_row(ref, str(spec.task), spec.description)
     console.print(table)
+    console.print(
+        "\n[dim]These are overrides, not the whole world. Any `hf:<repo-id>` is "
+        "resolved from its config.json — see `edgefit probe`.[/dim]"
+    )
+
+
+@app.command()
+def probe(
+    model: Annotated[str, typer.Option(help="Model ref, e.g. hf:google/vit-base-patch16-224")],
+) -> None:
+    """Show how a model would be measured, without exporting or downloading it.
+
+    Reads `config.json` alone — kilobytes, not gigabytes — so "can you measure this?"
+    is answerable before committing to a multi-gigabyte download. A model we cannot
+    place is refused here with the specific field that defeated us, rather than
+    measured through a harness that happens to accept it.
+    """
+    from edgefit.models.infer import UninferableModelError  # noqa: PLC0415
+    from edgefit.models.registry import REGISTRY, UnknownModelError  # noqa: PLC0415
+
+    try:
+        spec = resolve(model)
+    except (UninferableModelError, UnknownModelError) as exc:
+        console.print(f"[red]cannot measure {model}[/red]\n\n{exc}")
+        raise typer.Exit(code=1) from exc
+
+    source = "registry override" if model in REGISTRY else "inferred from config.json"
+    table = Table(title=f"{spec.hf_id}", header_style="bold")
+    table.add_column("field")
+    table.add_column("value", overflow="fold")
+    shape = " · ".join(f"{k}={v}" for k, v in spec.static_shape.items()) or "—"
+    for key, value in (
+        ("source", source),
+        ("task", str(spec.task)),
+        ("exporter", spec.exporter),
+        ("loaded with", spec.hf_class + (f" (.{spec.submodule})" if spec.submodule else "")),
+        ("output tensor", spec.output_attr),
+        ("input shape", shape),
+    ):
+        table.add_row(key, value)
+    console.print(table)
 
 
 @app.command()

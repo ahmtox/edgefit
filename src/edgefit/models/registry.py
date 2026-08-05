@@ -117,13 +117,35 @@ class UnknownModelError(KeyError):
     """Raised for a ref that is not in the registry."""
 
 
-def resolve(ref: str) -> ModelSpec:
-    """Look up a model spec by ref, e.g. ``hf:google/vit-base-patch16-224-in21k``."""
-    try:
-        return REGISTRY[ref]
-    except KeyError as exc:
-        known = "\n  ".join(sorted(REGISTRY))
-        raise UnknownModelError(f"unknown model {ref!r}. Known models:\n  {known}") from exc
+def resolve(ref: str, *, infer: bool = True) -> ModelSpec:
+    """Look up a model spec by ref, e.g. ``hf:google/vit-base-patch16-224-in21k``.
+
+    The registry is consulted first and is authoritative — it holds the cases inference
+    gets wrong, like bart's encoder-only submodule and CLIP's vision tower. Anything
+    else is inferred from the model's ``config.json``.
+
+    That ordering matters. This used to be a bare dict lookup, which meant the harness
+    could only measure models we had personally added, and a customer's model raised
+    ``UnknownModelError``. The registry is now a set of *corrections* to inference
+    rather than the only door in — which is hard rule #8 (every engagement adds a
+    platform capability, never a bespoke script) enforced by there being no other path.
+
+    ``infer=False`` keeps this I/O-free for callers that only replay cached artifacts.
+    """
+    known = REGISTRY.get(ref)
+    if known is not None:
+        return known
+    if not infer:
+        raise UnknownModelError(f"{ref!r} is not a registered model and inference is off")
+    if not ref.startswith("hf:"):
+        raise UnknownModelError(
+            f"cannot infer a spec for {ref!r}: only 'hf:<repo-id>' refs can be looked up. "
+            f"Registered models:\n  " + "\n  ".join(sorted(REGISTRY))
+        )
+
+    from edgefit.models.infer import infer_spec, load_hf_config  # noqa: PLC0415
+
+    return infer_spec(ref, load_hf_config(ref.removeprefix("hf:")))
 
 
 def known_refs() -> list[str]:
