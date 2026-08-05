@@ -37,6 +37,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from onnx import TensorProto
+
 from edgefit import HARNESS_VERSION
 from edgefit.corpus.store import CorpusStore
 from edgefit.schema.common import (
@@ -58,6 +60,21 @@ from edgefit.schema.recipe import QaiHubComputeUnit, QaiHubRuntimeConfig, Recipe
 #: more than an order of magnitude. Three matches our own local warmup policy, so the
 #: two sources stay comparable, and the count is recorded on every row.
 REMOTE_WARMUP_SAMPLES = 3
+
+#: ONNX integer dtypes. An input of one of these is an index into something, and a
+#: random value for it is very unlikely to be in bounds.
+_INDEX_DTYPES = frozenset(
+    {
+        TensorProto.INT8,
+        TensorProto.INT16,
+        TensorProto.INT32,
+        TensorProto.INT64,
+        TensorProto.UINT8,
+        TensorProto.UINT16,
+        TensorProto.UINT32,
+        TensorProto.UINT64,
+    }
+)
 
 #: Device facts a hosted farm does not expose. Recorded as reasons, never guessed.
 _UNKNOWN_HOST = {
@@ -137,11 +154,16 @@ def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> 
     if not isinstance(runtime, QaiHubRuntimeConfig):
         raise RemoteMeasurementError(f"recipe runtime {runtime.kind!r} is not a hosted device")
 
+    model_path = artifact_dir / "model.onnx"
+    # Before the upload, not after: an 86 MiB push and a provisioned device are both
+    # wasted on a job that cannot produce a valid input.
+    check_inputs_are_synthesizable(model_path)
+
     device = _resolve_device(hub, runtime)
     options = _profile_options(runtime)
 
     try:
-        model = hub.upload_model(str(artifact_dir / "model.onnx"))
+        model = hub.upload_model(str(model_path))
         job = hub.submit_profile_job(
             model=model,
             device=device,
@@ -173,6 +195,44 @@ def _profile_options(runtime: QaiHubRuntimeConfig) -> str | None:
         # something we did not.
         return None
     return f"--compute_unit {runtime.compute_unit.value}"
+
+
+class UnprofilableOnHostedService(RemoteMeasurementError):
+    """The service cannot generate valid inputs for this model, so no job is worth running."""
+
+
+def check_inputs_are_synthesizable(model_path: Path) -> None:
+    """Refuse models whose inputs a random-input profiler cannot fabricate validly.
+
+    AI Hub profile jobs synthesize their own inputs — there is no parameter to supply
+    them, unlike inference jobs. For a float input that is harmless: any value is
+    legal. For an *index* input it is not. MiniLM failed on a Snapdragon CPU with
+    ``indices element out of data bounds, idx=3 must be within the inclusive range
+    [-2,1]`` on the `token_type_embeddings` Gather, because a random int64 is not a
+    token type.
+
+    That failure says nothing about the device and nothing about the model. It is a
+    property of submitting an index-input graph to a service that fabricates inputs —
+    our choice. Recording it as the device refusing the model would be the same error
+    the decisions log already names: a true observation about one thing, reported as a
+    fact about another. So we refuse before spending a device, and record no row.
+    """
+    import onnx  # noqa: PLC0415
+
+    model = onnx.load(str(model_path), load_external_data=False)
+    integer_inputs = [
+        value.name
+        for value in model.graph.input
+        if value.type.HasField("tensor_type")
+        and value.type.tensor_type.elem_type in _INDEX_DTYPES
+    ]
+    if integer_inputs:
+        raise UnprofilableOnHostedService(
+            f"AI Hub profile jobs synthesize random inputs, and {', '.join(integer_inputs)} "
+            "are integer indices — random values fall outside embedding bounds and the "
+            "job fails for a reason that is about neither the device nor the model. "
+            "Use a float-input model, or an inference job that accepts real inputs."
+        )
 
 
 def _raise_if_failed(job, status) -> None:

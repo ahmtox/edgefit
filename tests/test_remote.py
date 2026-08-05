@@ -13,9 +13,11 @@ from edgefit.harness.remote import (
     REMOTE_WARMUP_SAMPLES,
     RemoteMeasurementError,
     RemoteProfile,
+    UnprofilableOnHostedService,
     _parse_profile,
     _profile_options,
     build_record,
+    check_inputs_are_synthesizable,
     remote_device_fingerprint,
     remote_fallback_report,
     remote_host_state,
@@ -233,6 +235,58 @@ class TestProfileOptions:
         """`target_runtime` is gone from the schema, not merely unsent."""
         with pytest.raises(ValidationError):
             QaiHubRuntimeConfig(device_name="Samsung Galaxy S24 (Family)", target_runtime="tflite")
+
+
+class TestInputSynthesis:
+    """A hosted profiler fabricates its own inputs, and cannot fabricate an index.
+
+    MiniLM failed on a Snapdragon CPU with `indices element out of data bounds, idx=3
+    must be within the inclusive range [-2,1]` on the `token_type_embeddings` Gather.
+    A random int64 is not a token type. That failure is about neither the device nor
+    the model — it is about submitting an index-input graph to a service that invents
+    inputs — so it must not become a `runtime_failure` row against the device.
+    """
+
+    @staticmethod
+    def _model(tmp_path, inputs):
+        import onnx
+        from onnx import helper
+
+        graph = helper.make_graph(
+            nodes=[helper.make_node("Identity", [inputs[0][0]], ["out"])],
+            name="g",
+            inputs=[helper.make_tensor_value_info(n, t, [1, 8]) for n, t in inputs],
+            outputs=[helper.make_tensor_value_info("out", inputs[0][1], [1, 8])],
+        )
+        path = tmp_path / "model.onnx"
+        onnx.save_model(
+            helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)]), str(path)
+        )
+        return path
+
+    def test_an_index_input_is_refused_before_a_device_is_spent(self, tmp_path) -> None:
+        from onnx import TensorProto
+
+        path = self._model(
+            tmp_path,
+            [
+                ("input_ids", TensorProto.INT64),
+                ("token_type_ids", TensorProto.INT64),
+            ],
+        )
+
+        with pytest.raises(UnprofilableOnHostedService) as caught:
+            check_inputs_are_synthesizable(path)
+        # Names the offending inputs, so the message is actionable rather than a verdict.
+        assert "input_ids" in str(caught.value)
+        assert "token_type_ids" in str(caught.value)
+
+    def test_a_float_input_model_is_allowed(self, tmp_path) -> None:
+        """ViT takes only `pixel_values`: every random value is a legal image."""
+        from onnx import TensorProto
+
+        path = self._model(tmp_path, [("pixel_values", TensorProto.FLOAT)])
+        check_inputs_are_synthesizable(path)  # must not raise
 
 
 def test_a_local_recipe_is_rejected_by_the_remote_path(cpu_recipe) -> None:
