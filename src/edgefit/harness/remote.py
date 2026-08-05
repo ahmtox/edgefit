@@ -70,7 +70,23 @@ _UNKNOWN_HOST = {
 
 
 class RemoteMeasurementError(Exception):
-    """The hosted job could not be run or its result could not be read."""
+    """The hosted job could not be submitted or its result could not be read."""
+
+
+class RemoteJobFailed(RemoteMeasurementError):
+    """The hosted job ran and failed. Carries the vendor's own diagnosis.
+
+    Distinguished from RemoteMeasurementError because this is *data*: §5.9 makes
+    failures first-class, and a vendor telling us exactly why their NPU refused a
+    graph is worth more than most successes. Swallowing it — which an earlier version
+    did, by parsing a failed job's empty profile and complaining about missing samples
+    — throws away the most useful thing the service said.
+    """
+
+    def __init__(self, message: str, *, job_id: str, job_url: str) -> None:
+        super().__init__(message)
+        self.job_id = job_id
+        self.job_url = job_url
 
 
 @dataclass(frozen=True)
@@ -134,6 +150,8 @@ def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> 
         )
         if not wait:
             raise RemoteMeasurementError("non-blocking submission is not implemented")
+        status = job.wait()
+        _raise_if_failed(job, status)
         profile = job.download_profile()
     except RemoteMeasurementError:
         raise
@@ -141,6 +159,25 @@ def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> 
         raise RemoteMeasurementError(f"{type(exc).__name__}: {exc}") from exc
 
     return _parse_profile(profile, job, device, getattr(hub, "__version__", "unknown"))
+
+
+def _raise_if_failed(job, status) -> None:
+    """Turn a failed hosted job into its vendor-supplied reason.
+
+    Checked explicitly because ``download_profile()`` on a failed job returns a
+    payload with no samples, which is indistinguishable from a malformed response
+    unless the status is consulted first.
+    """
+    code = getattr(status, "code", None)
+    name = getattr(code, "name", str(code)) if code is not None else ""
+    if str(name).upper() == "SUCCESS":
+        return
+    message = getattr(status, "message", None) or getattr(status, "failure_reason", None)
+    raise RemoteJobFailed(
+        str(message or f"hosted job ended in state {name!r} without a message"),
+        job_id=job.job_id,
+        job_url=job.url,
+    )
 
 
 def _resolve_device(hub, runtime: QaiHubRuntimeConfig):
@@ -342,6 +379,51 @@ def build_record(
     )
 
 
+def failure_record(
+    recipe: Recipe, failure: RemoteJobFailed, fingerprint_id: str | None
+) -> MeasurementRecord:
+    """A hosted job that ran and failed, with the vendor's reason attached.
+
+    This is the cross-vendor counterpart of our local ``lowering_failure`` rows. A
+    delegate refusing a graph is the finding, not an inconvenience.
+    """
+    runtime = recipe.runtime
+    assert isinstance(runtime, QaiHubRuntimeConfig)
+    return MeasurementRecord(
+        harness_version=HARNESS_VERSION,
+        recipe_id=recipe.recipe_id,
+        model_ref=recipe.model.ref,
+        graph_fingerprint_id=fingerprint_id,
+        device=DeviceFingerprint(
+            kind="hosted",
+            model=runtime.device_name,
+            soc="unknown",
+            arch="unknown",
+            os_name="unknown",
+            os_version=runtime.device_os or "unknown",
+            os_build="unknown",
+        ),
+        host_state=remote_host_state(),
+        measurement_source=MeasurementSource.THIRD_PARTY,
+        source_detail=(
+            f"Qualcomm AI Hub profile job {failure.job_id} ({failure.job_url}) "
+            f"ended in FAILED"
+        ),
+        stress_profile=StressProfile.UNKNOWN,
+        outcome=Outcome.RUNTIME_FAILURE,
+        failure_reason=str(failure),
+        run_count=0,
+        warmup_count=0,
+        metrics=Metrics(
+            unavailable={
+                "latency_ms": "the hosted job failed, so nothing was timed",
+                "power_mw": "hosted device; no power instrumentation exposed",
+                "accuracy": "the hosted job failed",
+            }
+        ),
+    )
+
+
 def measure_remote(
     recipe: Recipe,
     artifact_dir: Path,
@@ -349,9 +431,18 @@ def measure_remote(
     store: CorpusStore | None = None,
     fingerprint_id: str | None = None,
 ) -> MeasurementRecord:
-    """Profile one recipe on its hosted device and record the result."""
-    profile = submit_profile(recipe, artifact_dir)
-    record = build_record(recipe, profile, fingerprint_id)
+    """Profile one recipe on its hosted device and record the result.
+
+    A job that runs and fails produces a ``runtime_failure`` row carrying the
+    vendor's message, rather than an exception the caller has to interpret.
+    """
+    try:
+        profile = submit_profile(recipe, artifact_dir)
+    except RemoteJobFailed as failure:
+        record = failure_record(recipe, failure, fingerprint_id)
+    else:
+        record = build_record(recipe, profile, fingerprint_id)
+
     if store is not None:
         store.insert_recipe(recipe)
         store.insert_measurement(record)

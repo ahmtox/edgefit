@@ -486,7 +486,15 @@ def measure_remote_cmd(
                 with console.status(f"profiling on {name}… (provisioning real hardware)"):
                     record = measure_remote(recipe, artifact.directory, store=store)
             except RemoteMeasurementError as exc:
-                console.print(f"  [red]✗[/red] {name:<32} {str(exc)[:90]}")
+                console.print(f"  [red]![/red] {name:<32} not submitted: {str(exc)[:80]}")
+                continue
+            if record.outcome is not Outcome.SUCCESS:
+                # Recorded, not skipped: a vendor explaining why its NPU refused a
+                # graph is worth more than most successes (§5.9).
+                console.print(
+                    f"  [red]✗[/red] {name:<32} {record.outcome} "
+                    f"[dim]{(record.failure_reason or '')[:70]}[/dim]"
+                )
                 continue
             stats = record.metrics.latency_ms  # type: ignore[union-attr]
             fb = record.fallback_as_run
