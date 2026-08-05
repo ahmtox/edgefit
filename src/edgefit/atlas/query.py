@@ -94,11 +94,24 @@ class Row:
     harness_version: str
     created_at: datetime
     stress_profile: str
+    measurement_source: str
+    source_detail: str | None
     recipe_path: str | None = None
 
     @property
     def ok(self) -> bool:
         return self.outcome == "success"
+
+    @property
+    def is_ours(self) -> bool:
+        """Whether we took this measurement on a device we controlled.
+
+        Load-bearing. "Third-party figures are recorded but never impersonate our
+        measurements" is a recorded decision, and rendering a hosted row identically to
+        one of ours is precisely how it would be broken — the corpus keeps them apart
+        and then the published page puts them in the same cell.
+        """
+        return self.measurement_source != "third_party"
 
     @property
     def generative(self) -> bool:
@@ -125,6 +138,19 @@ class Row:
 
     @property
     def reproduce(self) -> str:
+        """The command that regenerates this row.
+
+        Hosted rows take a different one. They were never produced by `measure`, and
+        they have no recipe YAML in the library — so the generic path would have
+        printed "recipe … is no longer in the library" for every third-party row and
+        quietly broken the per-row reproducibility the methodology page promises.
+        """
+        if not self.is_ours:
+            return (
+                f"uv run edgefit measure-remote --model {self.model_ref} "
+                f'--device "{self.device_model}" --compute-unit '
+                f"{self.intended_provider.lower()}"
+            )
         if not self.recipe_path:
             return f"# recipe {self.recipe_id} is no longer in the library"
         return (
@@ -224,7 +250,8 @@ SELECT m.measurement_id, m.model_ref, r.task, coalesce(r.label, r.intended_provi
        m.peak_rss_bytes, m.artifact_bytes, m.lowering_ms, m.output_cosine_vs_reference,
        m.fallback_flops_pct, m.fallback_node_pct, m.as_run_time_pct, m.as_run_partitions,
        m.thermal_state, m.power_source, m.calibration_ratio,
-       m.harness_version, m.created_at, m.stress_profile
+       m.harness_version, m.created_at, m.stress_profile,
+       m.measurement_source, m.source_detail
 FROM measurements m LEFT JOIN recipes r USING (recipe_id)
 ORDER BY m.model_ref, m.latency_p50_ms NULLS LAST
 """
@@ -248,6 +275,7 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
             rss, artifact, lowering, cosine,
             fb_flops, fb_node, as_run_time, as_run_parts,
             thermal, power, calib, harness, created, stress,
+            source, source_detail,
         ) = record
         name = model_ref.removeprefix("hf:").split("/")[-1]
         rows.append(
@@ -292,6 +320,8 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
                 harness_version=harness,
                 created_at=created,
                 stress_profile=stress,
+                measurement_source=source,
+                source_detail=source_detail,
                 recipe_path=paths.get(label or ""),
             )
         )

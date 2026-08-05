@@ -161,6 +161,7 @@ def test_group_median_averages_the_middle_of_an_even_count(device, host_state, c
             as_run_partitions=None, thermal_state="nominal", power_source="ac",
             calibration_ratio=1.0, harness_version=HARNESS_VERSION,
             created_at=datetime.now(UTC), stress_profile="clean",
+            measurement_source="edgefit", source_detail=None,
         )
 
     assert group_median([row(9.68), row(9.72)]) == pytest.approx(9.70)

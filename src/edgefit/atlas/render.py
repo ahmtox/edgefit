@@ -132,6 +132,20 @@ _MATRIX_HEAD = """
 """
 
 
+def _source_mark(row: Row) -> str:
+    """Mark a row we did not measure ourselves.
+
+    The corpus already separates third-party figures from ours, and a recorded
+    decision says they must never impersonate our measurements. Rendering them into
+    the same cell with no mark is exactly how that decision would be broken on the
+    page rather than in the data.
+    """
+    if row.is_ours:
+        return ""
+    detail = escape(row.source_detail or "measured by a third party")
+    return f' <abbr class="thirdparty" title="{detail}">3P</abbr>'
+
+
 def _matrix_row(row: Row, *, depth: int) -> str:
     up = "../" * depth
     return (
@@ -140,7 +154,8 @@ def _matrix_row(row: Row, *, depth: int) -> str:
         f'<td><a href="{up}models/{row.model_slug}.html">{escape(row.model_name)}</a></td>'
         f'<td class="mono">{escape(row.recipe_label)}</td>'
         f'<td><a href="{up}devices/{row.device_slug}.html">{escape(row.soc)}</a> '
-        f'<span class="dim">{escape(row.provider_short)}</span></td>'
+        f'<span class="dim">{escape(row.provider_short)}</span>'
+        f"{_source_mark(row)}</td>"
         f"<td>{_outcome_badge(row)}</td>"
         + _cell(row.p50_ms)
         + _cell(row.ttft_p50_ms, 1)

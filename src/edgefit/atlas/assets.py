@@ -107,6 +107,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   white-space: nowrap; }
 .badge.ok { color: var(--good-text); }
 .badge.fail { color: var(--critical); }
+
+/* Not our measurement. Marked wherever a number appears, because the whole point of
+   separating third-party figures in the corpus is that they stay separated on sight. */
+.thirdparty { font-size: .7rem; font-weight: 600; letter-spacing: .04em;
+  padding: 0 .3rem; border-radius: 3px; border: 1px solid var(--border);
+  color: var(--muted); cursor: help; text-decoration: none; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 
 .controls { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: 1rem 0 .75rem; }
