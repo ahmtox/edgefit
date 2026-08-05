@@ -418,7 +418,14 @@ def build_record(
             f"Qualcomm AI Hub profile job {profile.job_id} ({profile.job_url}); "
             f"qai-hub client {profile.client_version}; "
             f"{len(profile.samples_us)} raw samples reported, first "
-            f"{REMOTE_WARMUP_SAMPLES} discarded as warmup"
+            f"{REMOTE_WARMUP_SAMPLES} discarded as warmup; "
+            # Hard rule #4 says measure end-to-end. This does not, and the difference
+            # has to travel with the number: the atlas will print it beside our own
+            # rows, which include the host-side framework overhead that AI Hub's
+            # inference time excludes. Load is reported separately, in notes.
+            "timing is AI Hub's on-device inference time, which excludes model load "
+            "and host-side framework overhead, so it is not end-to-end in our sense "
+            "and reads faster than our own rows by that margin"
         ),
         stress_profile=StressProfile.UNKNOWN,
         outcome=Outcome.SUCCESS,

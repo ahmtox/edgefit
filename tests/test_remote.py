@@ -108,6 +108,17 @@ class TestProvenance:
         assert "0.54.0" in detail
         assert "discarded as warmup" in detail
 
+    def test_source_detail_says_the_timing_is_not_end_to_end(self) -> None:
+        """Hard rule #4 is measure end-to-end; AI Hub's inference time is not.
+
+        The caveat has to travel on the row, because the atlas prints these beside our
+        own numbers — ViT reads 10.9 ms on a Snapdragon NPU against 108.7 ms on our M2
+        CPU, and part of that gap is a difference in what the two harnesses time.
+        """
+        detail = build_record(_recipe(), _profile(), None).source_detail or ""
+        assert "not end-to-end" in detail
+        assert "framework overhead" in detail
+
     def test_stress_profile_is_unknown_not_clean(self) -> None:
         """We cannot see the device's thermal state, so we must not claim it was quiet."""
         assert build_record(_recipe(), _profile(), None).stress_profile is StressProfile.UNKNOWN
