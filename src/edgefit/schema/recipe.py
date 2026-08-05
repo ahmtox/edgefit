@@ -225,6 +225,12 @@ class QaiHubRuntimeConfig(_Frozen):
     itself. Pretending otherwise would put a provider in the recipe that nothing
     honours, and a recipe field that does not affect the run is how recipes start
     lying.
+
+    That rule is why there is no ``target_runtime`` here. It reads like the obvious
+    axis — tflite vs onnx vs qnn_context_binary — but it is a *compile*-job option,
+    and profile jobs reject it outright (``unrecognized arguments:
+    --target_runtime``). Compile jobs are broken server-side, so the field could
+    only ever have been recorded and ignored. It returns when compile does.
     """
 
     kind: Literal[RuntimeKind.QAI_HUB] = RuntimeKind.QAI_HUB
@@ -232,16 +238,12 @@ class QaiHubRuntimeConfig(_Frozen):
     device_os: str | None = Field(
         default=None, description="Pin the OS version; AI Hub picks one when omitted."
     )
-    target_runtime: str | None = Field(
-        default=None,
-        description=(
-            "AI Hub target runtime (tflite, onnx, qnn_context_binary). "
-            "Service default when omitted."
-        ),
-    )
     compute_unit: QaiHubComputeUnit = Field(
         default=QaiHubComputeUnit.ALL,
-        description="What we are hoping for. AI Hub decides; the measured split is recorded.",
+        description=(
+            "Passed to the job as --compute_unit. What we ask for; AI Hub still "
+            "decides per node, and the measured split is what gets recorded."
+        ),
     )
 
     @property

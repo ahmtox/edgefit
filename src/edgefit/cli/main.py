@@ -445,9 +445,9 @@ def measure_remote_cmd(
         typer.Option(help="AI Hub device name. Repeatable. Omit for a default spread."),
     ] = None,
     corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
-    target_runtime: Annotated[
-        str | None, typer.Option(help="AI Hub target runtime (tflite, onnx, qnn_context_binary).")
-    ] = None,
+    compute_unit: Annotated[
+        str, typer.Option(help="Compute unit to ask AI Hub for: all, npu, gpu, cpu.")
+    ] = "all",
 ) -> None:
     """Profile a model on Qualcomm AI Hub's hosted devices.
 
@@ -479,7 +479,7 @@ def measure_remote_cmd(
         for name in devices:
             recipe = Recipe(
                 model=ModelRef(ref=spec.ref, task=spec.task),
-                runtime=QaiHubRuntimeConfig(device_name=name, target_runtime=target_runtime),
+                runtime=QaiHubRuntimeConfig(device_name=name, compute_unit=compute_unit),
                 lowering={"static_shapes": spec.exporter != "decoder"},
             )
             try:

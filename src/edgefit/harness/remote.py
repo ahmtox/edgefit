@@ -48,7 +48,7 @@ from edgefit.schema.common import (
 )
 from edgefit.schema.host import DeviceFingerprint, HostState
 from edgefit.schema.measurement import FallbackReport, MeasurementRecord, Metrics, RunStats
-from edgefit.schema.recipe import QaiHubRuntimeConfig, Recipe
+from edgefit.schema.recipe import QaiHubComputeUnit, QaiHubRuntimeConfig, Recipe
 
 #: Leading samples discarded before aggregation.
 #:
@@ -138,7 +138,7 @@ def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> 
         raise RemoteMeasurementError(f"recipe runtime {runtime.kind!r} is not a hosted device")
 
     device = _resolve_device(hub, runtime)
-    options = f"--target_runtime {runtime.target_runtime}" if runtime.target_runtime else None
+    options = _profile_options(runtime)
 
     try:
         model = hub.upload_model(str(artifact_dir / "model.onnx"))
@@ -159,6 +159,20 @@ def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> 
         raise RemoteMeasurementError(f"{type(exc).__name__}: {exc}") from exc
 
     return _parse_profile(profile, job, device, getattr(hub, "__version__", "unknown"))
+
+
+def _profile_options(runtime: QaiHubRuntimeConfig) -> str | None:
+    """Translate the recipe into AI Hub's own flag vocabulary.
+
+    Only flags a *profile* job accepts appear here. Compile-job flags are rejected
+    with ``unrecognized arguments`` rather than ignored, which is the better
+    failure — but it means the recipe must not carry them at all.
+    """
+    if runtime.compute_unit is QaiHubComputeUnit.ALL:
+        # The service default. Sending it explicitly would claim we constrained
+        # something we did not.
+        return None
+    return f"--compute_unit {runtime.compute_unit.value}"
 
 
 def _raise_if_failed(job, status) -> None:

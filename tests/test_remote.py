@@ -7,12 +7,14 @@ corpus — warmup handling, provenance honesty, and per-node placement parsing.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from edgefit.harness.remote import (
     REMOTE_WARMUP_SAMPLES,
     RemoteMeasurementError,
     RemoteProfile,
     _parse_profile,
+    _profile_options,
     build_record,
     remote_device_fingerprint,
     remote_fallback_report,
@@ -206,6 +208,31 @@ class TestParseProfile:
         """No raw samples means no variance, and a record without variance is invalid."""
         with pytest.raises(RemoteMeasurementError, match="no per-run samples"):
             _parse_profile({"execution_summary": {}}, self._Job(), self._Device(), "0.54.0")
+
+
+class TestProfileOptions:
+    """Every recipe axis must actually reach the job.
+
+    The first version of this backend passed ``--target_runtime`` — a *compile*-job
+    flag that profile jobs reject outright — while ``compute_unit``, the axis profile
+    jobs do honour, was never sent at all. The recipe therefore recorded a constraint
+    the run never applied, which is the same class of defect as quoting a FLOP share
+    for a graph that never ran.
+    """
+
+    def test_a_requested_unit_becomes_the_flag_the_service_accepts(self) -> None:
+        for unit in (QaiHubComputeUnit.NPU, QaiHubComputeUnit.GPU, QaiHubComputeUnit.CPU):
+            options = _profile_options(_recipe(unit).runtime)
+            assert options == f"--compute_unit {unit.value}"
+
+    def test_the_default_sends_nothing(self) -> None:
+        """`all` is the service default; sending it would claim a constraint we did not set."""
+        assert _profile_options(_recipe(QaiHubComputeUnit.ALL).runtime) is None
+
+    def test_no_compile_only_flag_can_be_expressed(self) -> None:
+        """`target_runtime` is gone from the schema, not merely unsent."""
+        with pytest.raises(ValidationError):
+            QaiHubRuntimeConfig(device_name="Samsung Galaxy S24 (Family)", target_runtime="tflite")
 
 
 def test_a_local_recipe_is_rejected_by_the_remote_path(cpu_recipe) -> None:
