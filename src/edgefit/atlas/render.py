@@ -167,6 +167,31 @@ _MATRIX_HEAD = """
 """
 
 
+def _run_count_caption(rows: list[Row]) -> str:
+    """State the actual run counts, which differ between our rows and hosted ones."""
+    counts = sorted({row.run_count for row in rows if row.run_count})
+    warmups = sorted({row.warmup_count for row in rows if row.run_count})
+    if not counts:
+        return "Median latency."
+    runs = str(counts[0]) if len(counts) == 1 else f"{counts[0]}–{counts[-1]}"
+    warm = str(warmups[0]) if len(warmups) == 1 else f"{warmups[0]}–{warmups[-1]}"
+    return f"Median of {runs} timed runs after {warm} discarded warmups."
+
+
+def _fleet_summary(devices: list[Device]) -> str:
+    """How many devices, and whose."""
+    ours = [d for d in devices if any(r.is_ours for r in d.rows)]
+    hosted = [d for d in devices if d not in ours]
+    parts = []
+    if ours:
+        parts.append(f"{len(ours)} machine{'' if len(ours) == 1 else 's'} of our own")
+    if hosted:
+        parts.append(
+            f"{len(hosted)} reached through Qualcomm AI Hub, which we do not control"
+        )
+    return " and ".join(parts) or "nothing yet"
+
+
 def _ram(device) -> str:
     """RAM, or an admission. A hosted farm does not report its devices' memory."""
     if not device.ram_bytes:
@@ -383,7 +408,9 @@ def model_page(model: Model, depth: int = 1) -> str:
             unit="TTFT (prefill), ms" if model.generative else "p50 latency, ms",
             series_names=("CPU", "accelerator"),
         ),
-        "<figcaption>Median of 10 timed runs after 3 discarded warmups. "
+        # Counted from the rows: hosted rows carry ~97 samples, ours carry 10, and a
+        # hardcoded "10" was simply wrong for every Snapdragon row on the page.
+        f"<figcaption>{_run_count_caption(model.successes)} "
         "Hover a bar for variance and artifact size.</figcaption></figure>",
     ]
 
@@ -581,7 +608,10 @@ def device_page(device: Device, depth: int = 1) -> str:
     if device.cores_performance and device.cores_efficiency:
         cores += f" ({device.cores_performance}P + {device.cores_efficiency}E)"
 
-    largest = max((row.artifact_mib or 0) for row in device.rows) if device.rows else 0
+    # None, not 0, when nothing reported a size — AI Hub compiles server-side, so the
+    # deployed artifact is not something we can weigh, and "0 MiB" is an invented number.
+    sizes = [row.artifact_mib for row in device.rows if row.artifact_mib]
+    largest = max(sizes) if sizes else None
     body = [
         f"<h2>{escape(device.name)}</h2>",
         f'<div class="card">'
@@ -599,7 +629,13 @@ def device_page(device: Device, depth: int = 1) -> str:
         "<figcaption>Every successful measurement on this unit, fastest first."
         "</figcaption></figure>",
         "<h3>What fits</h3>",
-        f"<p>Largest artifact measured here is {largest:.0f} MiB against "
+        "<p>"
+        + (
+            f"Largest artifact measured here is {largest:.0f} MiB against "
+            if largest is not None
+            else "No artifact size is recorded for this device &mdash; the service "
+            "compiles server-side, so we cannot weigh what actually ships &mdash; against "
+        )
         + (
             f"{device.ram_bytes / 1024**3:.0f} GiB of RAM."
             if device.ram_bytes
@@ -645,8 +681,10 @@ def devices_index(devices: list[Device], depth: int = 1) -> str:
     )
     body = [
         "<h2>Devices</h2>",
-        "<p>The fleet, such as it is. One laptop-class unit today — which is why "
-        "nothing here is presented as a lab result.</p>",
+        # Counted, not asserted. This paragraph read "One laptop-class unit today" while
+        # listing three Snapdragon phones and no laptop at all.
+        f"<p>The fleet, such as it is: {_fleet_summary(devices)}. Nothing here is "
+        "presented as a lab result.</p>",
         '<div class="scroll"><table data-sortable><thead><tr>'
         "<th class='sortable'>Device</th><th class='sortable'>OS</th>"
         "<th class='sortable num'>RAM</th><th class='sortable num'>measurements</th>"

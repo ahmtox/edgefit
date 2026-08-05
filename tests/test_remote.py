@@ -186,6 +186,52 @@ class TestFallbackFromComputeUnits:
         assert report is not None
         assert report.fallback_node_pct == pytest.approx(100.0)
 
+    def test_an_unconstrained_unit_counts_anything_off_the_cpu(self) -> None:
+        """`ALL` is our sentinel for "we did not choose", not a unit AI Hub reports.
+
+        Looking it up in `nodes_per_unit` matched nothing, so every unconstrained row
+        reported **100% fallback while running entirely on the NPU** — inverted, on the
+        one metric this project exists to measure. Published, it would have said
+        Qualcomm's NPU never claims a graph.
+        """
+        report = remote_fallback_report(_profile(), QaiHubComputeUnit.ALL.value.upper())
+        assert report is not None
+        # 8 of 10 nodes on NPU, 2 on CPU: the CPU share is the fallback.
+        assert report.nodes_on_intended == 8
+        assert report.fallback_node_pct == pytest.approx(20.0)
+        assert report.fallback_time_pct == pytest.approx(20.0)
+
+    def test_unconstrained_with_everything_on_the_npu_is_zero_fallback(self) -> None:
+        """The real shape of the ViT rows: 429 of 429 nodes accelerated."""
+        report = remote_fallback_report(
+            _profile(nodes_per_unit={"NPU": 429}, time_per_unit_us={"NPU": 7678.0}),
+            QaiHubComputeUnit.ALL.value.upper(),
+        )
+        assert report is not None
+        assert report.fallback_node_pct == pytest.approx(0.0)
+        assert report.fallback_time_pct == pytest.approx(0.0)
+
+    def test_unconstrained_with_everything_on_the_cpu_is_total_fallback(self) -> None:
+        report = remote_fallback_report(
+            _profile(nodes_per_unit={"CPU": 401}, time_per_unit_us={"CPU": 271288.0}),
+            QaiHubComputeUnit.ALL.value.upper(),
+        )
+        assert report is not None
+        assert report.fallback_node_pct == pytest.approx(100.0)
+
+    def test_gpu_counts_as_accelerated_when_unconstrained(self) -> None:
+        """Off the CPU is the point; which accelerator claimed it is a separate question."""
+        report = remote_fallback_report(
+            _profile(
+                nodes_per_unit={"GPU": 30, "CPU": 10},
+                time_per_unit_us={"GPU": 90.0, "CPU": 10.0},
+            ),
+            QaiHubComputeUnit.ALL.value.upper(),
+        )
+        assert report is not None
+        assert report.nodes_on_intended == 30
+        assert report.fallback_time_pct == pytest.approx(10.0)
+
     def test_no_detail_yields_no_report(self) -> None:
         assert remote_fallback_report(_profile(nodes_per_unit={}), "NPU") is None
 

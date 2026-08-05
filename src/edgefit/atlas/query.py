@@ -73,6 +73,7 @@ class Row:
     outcome: str
     failure_reason: str | None
     run_count: int
+    warmup_count: int
     p50_ms: float | None
     p95_ms: float | None
     cv: float | None
@@ -215,23 +216,42 @@ class Model:
         return any(row.generative for row in self.successes)
 
     @property
-    def groups(self) -> list[tuple[str, list[Row]]]:
-        """Successful rows grouped by recipe, fastest group first.
+    def multi_device(self) -> bool:
+        return len({row.device_slug for row in self.successes}) > 1
 
-        Repeats matter: measuring the same recipe on the same unit twice is the only
-        repeatability evidence available without a second unit, so the atlas shows the
-        spread rather than rendering two mystery rows with slightly different numbers.
+    @property
+    def groups(self) -> list[tuple[str, list[Row]]]:
+        """Successful rows grouped by recipe **and device**, fastest group first.
+
+        The device is part of the key, and leaving it out was a defect. Grouping on the
+        recipe label alone put ViT's three Snapdragon devices into one group and the
+        page then presented them as repeat sessions of one recipe "on this unit", with a
+        74.58% spread offered as repeatability drift. It was three different phones.
+
+        Repeats matter, which is why this has to be right: measuring the same recipe on
+        the same unit twice is the only repeatability evidence available without a
+        second unit, so the atlas shows the spread rather than rendering two mystery
+        rows with slightly different numbers. A spread across devices is not that
+        evidence — it is the measurement.
         """
-        grouped: dict[str, list[Row]] = {}
+        grouped: dict[tuple[str, str], list[Row]] = {}
         for row in self.successes:
             if row.primary_ms is not None:
-                grouped.setdefault(row.recipe_label, []).append(row)
+                grouped.setdefault((row.recipe_label, row.device_slug), []).append(row)
+        labelled = [
+            (
+                f"{label} · {rows[0].soc}" if self.multi_device else label,
+                rows,
+            )
+            for (label, _), rows in grouped.items()
+        ]
         # Ordered by the same statistic the chart displays. Sorting by the minimum
         # while labelling the median puts bars out of order for repeated recipes.
-        return sorted(grouped.items(), key=lambda kv: group_median(kv[1]))
+        return sorted(labelled, key=lambda kv: group_median(kv[1]))
 
     @property
     def repeats(self) -> list[tuple[str, list[Row]]]:
+        """Groups measured more than once — same recipe, same device, separate sessions."""
         return [(label, rows) for label, rows in self.groups if len(rows) > 1]
 
     @property
@@ -247,7 +267,7 @@ _ROW_SQL = """
 SELECT m.measurement_id, m.model_ref, r.task, coalesce(r.label, r.intended_provider) AS label,
        m.recipe_id, r.intended_provider, r.weight_dtype, r.weight_granularity,
        m.device_id, m.device_model, m.soc, m.os_version, m.os_build,
-       m.outcome, m.failure_reason, m.run_count,
+       m.outcome, m.failure_reason, m.run_count, m.warmup_count,
        m.latency_p50_ms, m.latency_p95_ms, m.latency_cv,
        m.ttft_p50_ms, m.ttft_cv, m.decode_tok_s_p50, m.token_agreement,
        m.peak_rss_bytes, m.artifact_bytes, m.lowering_ms, m.output_cosine_vs_reference,
@@ -274,7 +294,8 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
         (
             mid, model_ref, task, label, recipe_id, provider, dtype, granularity,
             device_id, device_model, soc, os_version, os_build,
-            outcome, reason, run_count, p50, p95, cv, ttft, ttft_cv, decode, tok_agree,
+            outcome, reason, run_count, warmup_count, p50, p95, cv, ttft, ttft_cv,
+            decode, tok_agree,
             rss, artifact, lowering, cosine,
             fb_flops, fb_node, as_run_time, as_run_parts,
             thermal, power, calib, harness, created, stress,
@@ -302,6 +323,7 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
                 outcome=outcome,
                 failure_reason=reason,
                 run_count=run_count,
+                warmup_count=warmup_count,
                 p50_ms=p50,
                 p95_ms=p95,
                 cv=cv,

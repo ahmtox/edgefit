@@ -360,6 +360,23 @@ def remote_host_state() -> HostState:
     )
 
 
+def _on_intended(per_unit: dict[str, float], intended: str) -> float:
+    """How much of the graph landed where the recipe wanted it.
+
+    ``ALL`` needs its own arm and not having one was a real defect: it is our sentinel
+    for "we did not constrain the unit", not a unit AI Hub ever reports. A plain
+    ``per_unit.get("ALL", 0)`` therefore matched nothing and every unconstrained row
+    reported **100% fallback while running entirely on the NPU** — an inverted answer on
+    the one metric this project exists to measure.
+
+    When the unit is unconstrained the delegate's job is simply to get work off the
+    CPU, so anything not on the CPU counts as intended.
+    """
+    if intended == QaiHubComputeUnit.ALL.value.upper():
+        return sum(amount for unit, amount in per_unit.items() if unit.upper() != "CPU")
+    return per_unit.get(intended, 0)
+
+
 def remote_fallback_report(profile: RemoteProfile, intended: str) -> FallbackReport | None:
     """Per-node compute-unit placement, as the vendor measured it.
 
@@ -373,9 +390,9 @@ def remote_fallback_report(profile: RemoteProfile, intended: str) -> FallbackRep
     if not total_nodes:
         return None
 
-    on_intended = profile.nodes_per_unit.get(intended, 0)
+    on_intended = _on_intended(profile.nodes_per_unit, intended)
     total_time = sum(profile.time_per_unit_us.values())
-    intended_time = profile.time_per_unit_us.get(intended, 0.0)
+    intended_time = _on_intended(profile.time_per_unit_us, intended)
 
     unit_names = ", ".join(
         f"{unit}:{count}" for unit, count in sorted(profile.nodes_per_unit.items())
