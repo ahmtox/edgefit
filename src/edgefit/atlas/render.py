@@ -222,12 +222,27 @@ def index(summary: Summary, rows: list[Row], models: list[Model]) -> str:
 
 
 def _headline_findings(models: list[Model]) -> str:
-    """What the corpus says, stated once, on the front page."""
+    """What the corpus says, stated once, on the front page.
+
+    The comparison is strictly **within one device**. Across devices it is not a
+    statement about the delegate at all: with a Snapdragon row in the corpus, a
+    device-blind baseline put the S24's NPU at 7.7 ms against our M2's CPU at 108.7 ms
+    and printed "14.16× faster" on the front page. The ratio was arithmetically true
+    and almost entirely a different phone — the same misattribution as quoting FLOP
+    fallback for a graph that never ran, on the most prominent surface we have.
+    """
     lines = []
     for model in models:
         baseline = model.cpu_baseline
         accel = next(
-            (r for r in model.successes if r.provider_short != "CPU" and r.weight_dtype is None),
+            (
+                r
+                for r in model.successes
+                if r.provider_short != "CPU"
+                and r.weight_dtype is None
+                and baseline is not None
+                and r.device_slug == baseline.device_slug
+            ),
             None,
         )
         if not (baseline and accel and baseline.p50_ms and accel.p50_ms):
@@ -257,6 +272,9 @@ def _headline_findings(models: list[Model]) -> str:
         "mode. Both fallback columns are shown because they disagree, and the "
         "disagreement is the finding: see "
         "<a href='methodology.html#fallback'>methodology</a>.</p>"
+        "<p class='dim'>Each row compares an accelerator against the CPU <em>of the same "
+        "device</em>. Comparing across devices would measure the two devices, not the "
+        "delegate.</p>"
         '<div class="scroll"><table><thead><tr>'
         "<th>Model</th><th>Task</th><th class='num'>CPU fp32</th>"
         "<th class='num'>accelerated</th><th class='num'>verdict</th>"

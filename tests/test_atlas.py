@@ -318,6 +318,81 @@ class TestThirdPartyRows:
         assert 'class="thirdparty"' in index
         assert "jabc123" in index, "the mark must name the job that produced the number"
 
+    def test_the_accelerator_verdict_never_spans_devices(
+        self, tmp_path, device, host_state
+    ) -> None:
+        """A cross-device ratio is a statement about two devices, not about a delegate.
+
+        With one Snapdragon row in the corpus, the device-blind baseline put the S24's
+        NPU at 7.7 ms against our M2's CPU at 108.7 ms and printed "14.16× faster" as a
+        front-page headline finding. Arithmetically true, almost entirely a different
+        phone, and on the most prominent surface the atlas has.
+        """
+        from edgefit.harness.remote import remote_host_state
+        from edgefit.schema import (
+            DeviceFingerprint,
+            MeasurementSource,
+            ModelRef,
+            OrtProvider,
+            OrtRuntimeConfig,
+            QaiHubComputeUnit,
+            QaiHubRuntimeConfig,
+            Recipe,
+            StressProfile,
+            TaskType,
+        )
+
+        vit = "hf:google/vit-base-patch16-224-in21k"
+        local = Recipe(
+            model=ModelRef(ref=vit, task=TaskType.VISION),
+            runtime=OrtRuntimeConfig(providers=(OrtProvider.CPU,)),
+            label="ort-cpu-fp32",
+        )
+        remote = Recipe(
+            model=ModelRef(ref=vit, task=TaskType.VISION),
+            runtime=QaiHubRuntimeConfig(
+                device_name="Samsung Galaxy S24 (Family)", compute_unit=QaiHubComputeUnit.NPU
+            ),
+        )
+        slow = [108.0 + i * 0.4 for i in range(10)]
+        fast = [7.6 + i * 0.02 for i in range(10)]
+
+        with CorpusStore(tmp_path / "cross.duckdb") as store:
+            store.insert_recipe(local)
+            store.insert_recipe(remote)
+            store.insert_measurement(_record(device, host_state, local, slow))
+            store.insert_measurement(
+                MeasurementRecord(
+                    harness_version=HARNESS_VERSION,
+                    recipe_id=remote.recipe_id,
+                    model_ref=vit,
+                    device=DeviceFingerprint(
+                        kind="hosted",
+                        model="Samsung Galaxy S24 (Family)",
+                        soc="sm8650",
+                        arch="aarch64",
+                        os_name="android",
+                        os_version="14",
+                        os_build="unknown",
+                    ),
+                    host_state=remote_host_state(),
+                    measurement_source=MeasurementSource.THIRD_PARTY,
+                    source_detail="Qualcomm AI Hub profile job jxyz",
+                    stress_profile=StressProfile.UNKNOWN,
+                    outcome=Outcome.SUCCESS,
+                    run_count=len(fast),
+                    warmup_count=3,
+                    metrics=Metrics(latency_ms=RunStats.from_samples(fast)),
+                )
+            )
+            build(store, tmp_path / "site")
+
+        index = (tmp_path / "site" / "index.html").read_text()
+        assert "14.1" not in index, "an accelerator verdict was computed across devices"
+        assert "× faster" not in index and "× slower" not in index, (
+            "no within-device accelerator pair exists here, so no verdict should appear"
+        )
+
     def test_methodology_scopes_its_claims(self, hosted, tmp_path) -> None:
         """Our gate and thermal probe say nothing about someone else's rack."""
         build(hosted, tmp_path / "site")
