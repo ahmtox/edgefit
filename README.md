@@ -95,6 +95,14 @@ Stated here rather than buried, because the gaps are the reason to trust the res
 - **No power instrumentation, no thermal soak, no accuracy tier.** All null with
   recorded reasons rather than estimated.
 
+## A note on the `§` references
+
+The source cites `PROJECT.md §N` in about 85 places. That design document is not
+published — it is product strategy — so those are pointers you cannot follow, and the
+honest thing is to say so rather than let you hunt for a missing file. Where a reference
+is load-bearing for understanding *why the code does something*, the reasoning is
+restated inline next to it.
+
 ## Layout
 
 ```
