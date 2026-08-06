@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare · EdgeFit Atlas</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --good-text: #006300;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --good-text: #0ca30c;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 1.5rem 5rem; background: var(--plane); color: var(--ink);
+  font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+a { color: var(--series-1); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; letter-spacing: -0.005em; }
+h3 { font-size: .95rem; margin: 1.75rem 0 .5rem; color: var(--ink-2); }
+p { margin: .5rem 0; color: var(--ink-2); max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: .85em; }
+
+header.site { padding: 2rem 0 0; }
+nav.site { display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;
+  padding: .75rem 0 1.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+nav.site a { color: var(--ink-2); font-size: .9rem; }
+nav.site a.here { color: var(--ink); font-weight: 600; }
+nav.site .spacer { flex: 1; }
+button.theme { background: none; border: 1px solid var(--border); color: var(--ink-2);
+  border-radius: 6px; padding: .25rem .6rem; cursor: pointer; font: inherit; font-size: .8rem; }
+
+.banner { border: 1px solid var(--border); border-left: 3px solid var(--warning);
+  background: var(--surface-1); border-radius: 6px; padding: .85rem 1rem; margin: 1.25rem 0; }
+.banner strong { color: var(--ink); }
+.banner p { margin: .25rem 0 0; font-size: .9rem; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .75rem; margin: 1.5rem 0; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: .85rem 1rem; }
+.tile .v { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; display: block; }
+.tile .k { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1.1rem 1.25rem; margin: 1rem 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; }
+th { text-align: left; font-weight: 600; font-size: .78rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; padding: .6rem .7rem;
+  border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0;
+  background: var(--surface-1); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--ink); }
+th[aria-sort]::after { content: " ↑"; }
+th[aria-sort="descending"]::after { content: " ↓"; }
+td { padding: .5rem .7rem; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--plane); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dim { color: var(--muted); }
+.win { color: var(--good-text); font-weight: 600; }
+.lose { color: var(--critical); font-weight: 600; }
+
+.badge { display: inline-flex; align-items: center; gap: .3rem; font-size: .75rem;
+  padding: .1rem .45rem; border-radius: 4px; border: 1px solid var(--border);
+  white-space: nowrap; }
+.badge.ok { color: var(--good-text); }
+.badge.fail { color: var(--critical); }
+
+/* Not our measurement. Marked wherever a number appears, because the whole point of
+   separating third-party figures in the corpus is that they stay separated on sight. */
+.thirdparty { font-size: .7rem; font-weight: 600; letter-spacing: .04em;
+  padding: 0 .3rem; border-radius: 3px; border: 1px solid var(--border);
+  color: var(--muted); cursor: help; text-decoration: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+.controls { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: 1rem 0 .75rem; }
+.controls input, .controls select { font: inherit; font-size: .875rem; padding: .35rem .55rem;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--ink); }
+.controls input { min-width: 15rem; }
+.count { color: var(--muted); font-size: .85rem; }
+
+.legend { display: flex; gap: 1rem; flex-wrap: wrap; margin: .25rem 0 .75rem;
+  font-size: .82rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: .4rem; }
+
+figure { margin: 1rem 0 1.5rem; }
+figcaption { font-size: .82rem; color: var(--muted); margin-top: .4rem; }
+svg { display: block; max-width: 100%; height: auto; }
+svg text { font-family: var(--sans); }
+
+pre.repro { background: var(--plane); border: 1px solid var(--border); border-radius: 6px;
+  padding: .6rem .7rem; overflow-x: auto; font-family: var(--mono); font-size: .78rem;
+  color: var(--ink-2); margin: .35rem 0 0; }
+details summary { cursor: pointer; color: var(--ink-2); font-size: .85rem; }
+footer.site { margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: .82rem; }
+ul { color: var(--ink-2); max-width: 68ch; }
+li { margin: .3rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site"><h1><a href="" style="color:inherit">EdgeFit Atlas</a></h1>
+<p style="margin:0">Measured on-device inference.
+Every number reproducible; every failure recorded.</p></header>
+<nav class="site"><a href="">The matrix</a><a href="models/">Models</a><a href="devices/">Devices</a><a href="compare.html" class="here">Compare</a><a href="methodology.html">Methodology</a><a href="data/">Data</a><span class="spacer"></span>
+<button class="theme" type="button">theme</button></nav>
+
+<h2>Compare</h2>
+<p>Pick any two measurements. The URL updates as you choose, so a comparison is
+shareable as a link.</p>
+<div class="controls">
+  <select id="a"></select><span class="dim">against</span><select id="b"></select>
+</div>
+<div id="out"></div>
+<script id="rows" type="application/json">[{"id": "a20758b1588a2afe", "name": "distilbert-base-uncased \u00b7 ort-cpu-int8-dyn", "model": "distilbert-base-uncased", "recipe": "ort-cpu-int8-dyn", "target": "Apple M2 CPU", "outcome": "success", "p50": 11.3742915, "p95": 11.40031715, "cv": 0.0015206320666015887, "size": 63.60444164276123, "rss": 187.28125, "cosine": 0.9720665235790229, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_cpu_int8_dynamic.yaml"}, {"id": "4509691c937ea967", "name": "distilbert-base-uncased \u00b7 ort-cpu-int8-perchan", "model": "distilbert-base-uncased", "recipe": "ort-cpu-int8-perchan", "target": "Apple M2 CPU", "outcome": "success", "p50": 11.4724375, "p95": 11.5232247, "cv": 0.0022154041856536034, "size": 63.802367210388184, "rss": 187.625, "cosine": 0.9931606517332926, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_cpu_int8_perchannel.yaml"}, {"id": "4bf44ce2c34a66dd", "name": "distilbert-base-uncased \u00b7 ort-cpu-fp32", "model": "distilbert-base-uncased", "recipe": "ort-cpu-fp32", "target": "Apple M2 CPU", "outcome": "success", "p50": 32.1234375, "p95": 32.1413439, "cv": 0.0010315981577143775, "size": 253.22452354431152, "rss": 488.21875, "cosine": 0.9999999999993052, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_cpu_fp32.yaml"}, {"id": "4a7b218a42a0476a", "name": "distilbert-base-uncased \u00b7 ort-cpu-4thread", "model": "distilbert-base-uncased", "recipe": "ort-cpu-4thread", "target": "Apple M2 CPU", "outcome": "success", "p50": 32.1234795, "p95": 32.18426005, "cv": 0.0010694365641061858, "size": 253.22452354431152, "rss": 488.21875, "cosine": 0.9999999999993052, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_cpu_4thread.yaml"}, {"id": "ec642b48b4acca22", "name": "distilbert-base-uncased \u00b7 ort-cpu-dynamic", "model": "distilbert-base-uncased", "recipe": "ort-cpu-dynamic", "target": "Apple M2 CPU", "outcome": "success", "p50": 33.380958, "p95": 33.4859478, "cv": 0.0017265882937926706, "size": 253.25873565673828, "rss": 488.109375, "cosine": 0.9999999999995057, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_cpu_dynamic.yaml"}, {"id": "80f1c061759865cc", "name": "distilbert-base-uncased \u00b7 ort-coreml-fp16", "model": "distilbert-base-uncased", "recipe": "ort-coreml-fp16", "target": "Apple M2 CoreML", "outcome": "success", "p50": 35.5807295, "p95": 35.6608167, "cv": 0.0016218148279645898, "size": 126.67225646972656, "rss": 493.828125, "cosine": 0.999999521103535, "fbAuth": 99.9475, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_coreml_fp16.yaml"}, {"id": "692d139c4f763550", "name": "distilbert-base-uncased \u00b7 ort-cpu-fp16", "model": "distilbert-base-uncased", "recipe": "ort-cpu-fp16", "target": "Apple M2 CPU", "outcome": "success", "p50": 35.650583499999996, "p95": 35.71325625, "cv": 0.0015811349135476593, "size": 126.67225646972656, "rss": 518.15625, "cosine": 0.999999521103535, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_cpu_fp16.yaml"}, {"id": "d41e2513e66fae3c", "name": "distilbert-base-uncased \u00b7 ort-coreml-fp32", "model": "distilbert-base-uncased", "recipe": "ort-coreml-fp32", "target": "Apple M2 CoreML", "outcome": "success", "p50": 36.661313, "p95": 36.7351894, "cv": 0.0015240112136481493, "size": 253.22452354431152, "rss": 1174.25, "cosine": 0.9999995634117765, "fbAuth": 99.7838, "fbRun": 39.529, "parts": 31, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_coreml_fp32.yaml"}, {"id": "d9ff2958bf215a61", "name": "distilbert-base-uncased \u00b7 ort-coreml-ane", "model": "distilbert-base-uncased", "recipe": "ort-coreml-ane", "target": "Apple M2 CoreML", "outcome": "success", "p50": 39.406875, "p95": 39.92514115, "cv": 0.014825047823646959, "size": 253.22452354431152, "rss": 1177.0625, "cosine": 0.9999995634117765, "fbAuth": 99.7838, "fbRun": 33.7288, "parts": 31, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_coreml_ane.yaml"}, {"id": "d20a0491b508b389", "name": "distilbert-base-uncased \u00b7 ort-coreml-dynamic", "model": "distilbert-base-uncased", "recipe": "ort-coreml-dynamic", "target": "Apple M2 CoreML", "outcome": "success", "p50": 51.6603955, "p95": 51.8030375, "cv": 0.001795574883499727, "size": 253.25873565673828, "rss": 1308.0625, "cosine": 0.9999999999995018, "fbAuth": null, "fbRun": 22.0115, "parts": 44, "repro": "uv run edgefit measure --model hf:distilbert-base-uncased --recipe recipes/ort_coreml_dynamic.yaml"}, {"id": "03af2e6b6467444a", "name": "bart-base \u00b7 ort-cpu-int8-dyn", "model": "bart-base", "recipe": "ort-cpu-int8-dyn", "target": "Apple M2 CPU", "outcome": "success", "p50": 11.366312, "p95": 11.4122125, "cv": 0.0018868786715819296, "size": 78.42452907562256, "rss": 216.484375, "cosine": 0.9805030725023213, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_cpu_int8_dynamic.yaml"}, {"id": "4e63987c7905e85b", "name": "bart-base \u00b7 ort-cpu-int8-perchan", "model": "bart-base", "recipe": "ort-cpu-int8-perchan", "target": "Apple M2 CPU", "outcome": "success", "p50": 11.459041500000001, "p95": 11.488272550000001, "cv": 0.0015558544447051503, "size": 78.62245464324951, "rss": 217.84375, "cosine": 0.9908228226513536, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_cpu_int8_perchannel.yaml"}, {"id": "8cb1072e805ff454", "name": "bart-base \u00b7 ort-cpu-4thread", "model": "bart-base", "recipe": "ort-cpu-4thread", "target": "Apple M2 CPU", "outcome": "success", "p50": 32.0477505, "p95": 32.0875375, "cv": 0.0013071220186608036, "size": 312.56153869628906, "rss": 680.984375, "cosine": 0.9999999999994773, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_cpu_4thread.yaml"}, {"id": "102fc2ac936533a7", "name": "bart-base \u00b7 ort-cpu-fp32", "model": "bart-base", "recipe": "ort-cpu-fp32", "target": "Apple M2 CPU", "outcome": "success", "p50": 32.1082295, "p95": 32.1609814, "cv": 0.0012862758160258237, "size": 312.56153869628906, "rss": 681.4375, "cosine": 0.9999999999994773, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_cpu_fp32.yaml"}, {"id": "4f398229085ae4f6", "name": "bart-base \u00b7 ort-cpu-dynamic", "model": "bart-base", "recipe": "ort-cpu-dynamic", "target": "Apple M2 CPU", "outcome": "success", "p50": 33.072312499999995, "p95": 33.20017515, "cv": 0.0018480215905011795, "size": 312.58959579467773, "rss": 680.859375, "cosine": 0.9999999999997535, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_cpu_dynamic.yaml"}, {"id": "9b2d28e60656907f", "name": "bart-base \u00b7 ort-coreml-fp32", "model": "bart-base", "recipe": "ort-coreml-fp32", "target": "Apple M2 CoreML", "outcome": "success", "p50": 38.968333, "p95": 39.216077049999996, "cv": 0.006483993861313549, "size": 312.56153869628906, "rss": 1619.921875, "cosine": 0.9999997003971082, "fbAuth": 99.7829, "fbRun": 31.7951, "parts": 31, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_coreml_fp32.yaml"}, {"id": "5af48e208929d992", "name": "bart-base \u00b7 ort-coreml-ane", "model": "bart-base", "recipe": "ort-coreml-ane", "target": "Apple M2 CoreML", "outcome": "success", "p50": 41.5340415, "p95": 42.057877149999996, "cv": 0.020191029705437052, "size": 312.56153869628906, "rss": 1582.859375, "cosine": 0.9999997003971082, "fbAuth": 99.7829, "fbRun": 34.6432, "parts": 31, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_coreml_ane.yaml"}, {"id": "74d9638c4993eb7d", "name": "bart-base \u00b7 ort-coreml-dynamic", "model": "bart-base", "recipe": "ort-coreml-dynamic", "target": "Apple M2 CoreML", "outcome": "success", "p50": 53.4230205, "p95": 54.0561436, "cv": 0.005316289314368809, "size": 312.58959579467773, "rss": 1580.875, "cosine": 0.9999999999997955, "fbAuth": null, "fbRun": 16.3398, "parts": 45, "repro": "uv run edgefit measure --model hf:facebook/bart-base --recipe recipes/ort_coreml_dynamic.yaml"}, {"id": "d9e94c703b720ba6", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8750 ALL", "outcome": "success", "p50": 6.261, "p95": 6.5969999999999995, "cv": 0.0168643190902438, "size": null, "rss": 117.8828125, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Snapdragon 8 Elite QRD\" --compute-unit all"}, {"id": "c6e3ee7ae951e1e1", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8750 ALL", "outcome": "success", "p50": 6.262, "p95": 6.5664, "cv": 0.015092850802508141, "size": null, "rss": 213.91796875, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Snapdragon 8 Elite QRD\" --compute-unit all"}, {"id": "e4daa23e5998e047", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8650 ALL", "outcome": "success", "p50": 7.679, "p95": 7.703200000000001, "cv": 0.005311728588114689, "size": null, "rss": 157.078125, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S24 (Family)\" --compute-unit all"}, {"id": "2f6e23d9d7dbd9a8", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8650 ALL", "outcome": "success", "p50": 7.68, "p95": 7.7038, "cv": 0.0038189059213054816, "size": null, "rss": 163.8515625, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S24\" --compute-unit all"}, {"id": "1230321c60af38f1", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8650 ALL", "outcome": "success", "p50": 7.68, "p95": 7.7058, "cv": 0.007204900211342053, "size": null, "rss": 162.96875, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S24 (Family)\" --compute-unit all"}, {"id": "f4971dc5ff7d8d4e", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8650 ALL", "outcome": "success", "p50": 7.729, "p95": 7.7752, "cv": 0.005333484592750144, "size": null, "rss": 164.3671875, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S24+\" --compute-unit all"}, {"id": "1e0e957651715c0d", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8650 ALL", "outcome": "success", "p50": 7.746, "p95": 7.7896, "cv": 0.005491139610484213, "size": null, "rss": 167.4296875, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S24 Ultra\" --compute-unit all"}, {"id": "e024efc872b8be4c", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8550 ALL", "outcome": "success", "p50": 10.939, "p95": 11.11, "cv": 0.008646549999227699, "size": null, "rss": 252.7265625, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S23\" --compute-unit all"}, {"id": "f82c39d2dddeaebf", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8550 ALL", "outcome": "success", "p50": 10.944, "p95": 11.106599999999998, "cv": 0.009406564226398914, "size": null, "rss": 260.25, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S23 Ultra\" --compute-unit all"}, {"id": "ce029b66c63e8ef6", "name": "vit-base-patch16-224-in21k \u00b7 ort-cpu-int8-dyn", "model": "vit-base-patch16-224-in21k", "recipe": "ort-cpu-int8-dyn", "target": "Apple M2 CPU", "outcome": "success", "p50": 42.8382505, "p95": 42.88283955, "cv": 0.0007672756718635863, "size": 82.84467029571533, "rss": 199.578125, "cosine": 0.9842092540611682, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_cpu_int8_dynamic.yaml"}, {"id": "b150dd4bfc1c172f", "name": "vit-base-patch16-224-in21k \u00b7 ort-cpu-int8-perchan", "model": "vit-base-patch16-224-in21k", "recipe": "ort-cpu-int8-perchan", "target": "Apple M2 CPU", "outcome": "success", "p50": 43.105146000000005, "p95": 43.1487022, "cv": 0.0012907621558819777, "size": 83.24052143096924, "rss": 200.328125, "cosine": 0.9944530637573123, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_cpu_int8_perchannel.yaml"}, {"id": "35ba7fa048337e3a", "name": "vit-base-patch16-224-in21k \u00b7 ort-coreml-fp32", "model": "vit-base-patch16-224-in21k", "recipe": "ort-coreml-fp32", "target": "Apple M2 CoreML", "outcome": "success", "p50": 71.5415625, "p95": 75.84046715, "cv": 0.02532834971693268, "size": 327.40733528137207, "rss": 670.65625, "cosine": 0.9999940004419636, "fbAuth": 99.1008, "fbRun": 20.4499, "parts": 62, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_coreml_fp32.yaml"}, {"id": "9035281566070fb8", "name": "vit-base-patch16-224-in21k \u00b7 ort-coreml-ane", "model": "vit-base-patch16-224-in21k", "recipe": "ort-coreml-ane", "target": "Apple M2 CoreML", "outcome": "success", "p50": 75.626271, "p95": 75.7732455, "cv": 0.036901309015479306, "size": 327.40733528137207, "rss": 604.484375, "cosine": 0.9999940004419636, "fbAuth": 99.1008, "fbRun": 24.4284, "parts": 62, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_coreml_ane.yaml"}, {"id": "9969264a006c24d4", "name": "vit-base-patch16-224-in21k \u00b7 ort-cpu-4thread", "model": "vit-base-patch16-224-in21k", "recipe": "ort-cpu-4thread", "target": "Apple M2 CPU", "outcome": "success", "p50": 105.533875, "p95": 105.75562515, "cv": 0.0010733396168108413, "size": 327.40733528137207, "rss": 465.328125, "cosine": 0.9999999999965847, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_cpu_4thread.yaml"}, {"id": "9201406b7cb2ca99", "name": "vit-base-patch16-224-in21k \u00b7 ort-cpu-fp32", "model": "vit-base-patch16-224-in21k", "recipe": "ort-cpu-fp32", "target": "Apple M2 CPU", "outcome": "success", "p50": 105.6710625, "p95": 105.86693505, "cv": 0.00099200584008414, "size": 327.40733528137207, "rss": 444.5, "cosine": 0.9999999999965847, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_cpu_fp32.yaml"}, {"id": "5445d5c8b14aec2c", "name": "vit-base-patch16-224-in21k \u00b7 ort-cpu-dynamic", "model": "vit-base-patch16-224-in21k", "recipe": "ort-cpu-dynamic", "target": "Apple M2 CPU", "outcome": "success", "p50": 105.872208, "p95": 105.9522728, "cv": 0.0011930622871006646, "size": 327.45838737487793, "rss": 431.390625, "cosine": 0.999999999996438, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_cpu_dynamic.yaml"}, {"id": "ee6aed79ae03a55d", "name": "vit-base-patch16-224-in21k \u00b7 ort-cpu-fp16", "model": "vit-base-patch16-224-in21k", "recipe": "ort-cpu-fp16", "target": "Apple M2 CPU", "outcome": "success", "p50": 110.135458, "p95": 110.3338686, "cv": 0.0011676150138874078, "size": 163.80389404296875, "rss": 719.5, "cosine": 0.9999986338153205, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_cpu_fp16.yaml"}, {"id": "d95400ed5237ff9a", "name": "vit-base-patch16-224-in21k \u00b7 ort-coreml-fp16", "model": "vit-base-patch16-224-in21k", "recipe": "ort-coreml-fp16", "target": "Apple M2 CoreML", "outcome": "success", "p50": 110.41535400000001, "p95": 110.65761425, "cv": 0.0010238487769008988, "size": 163.80389404296875, "rss": 748.640625, "cosine": 0.9999986338153205, "fbAuth": 99.9209, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_coreml_fp16.yaml"}, {"id": "eee35a6b81c31387", "name": "vit-base-patch16-224-in21k \u00b7 ort-coreml-dynamic", "model": "vit-base-patch16-224-in21k", "recipe": "ort-coreml-dynamic", "target": "Apple M2 CoreML", "outcome": "success", "p50": 179.3632295, "p95": 182.28836235, "cv": 0.008870111362292418, "size": 327.45838737487793, "rss": 969.125, "cosine": 0.9999988105952448, "fbAuth": null, "fbRun": 46.243, "parts": 86, "repro": "uv run edgefit measure --model hf:google/vit-base-patch16-224-in21k --recipe recipes/ort_coreml_dynamic.yaml"}, {"id": "85dd78e2f7d7ed9d", "name": "vit-base-patch16-224-in21k \u00b7 CPU", "model": "vit-base-patch16-224-in21k", "recipe": "CPU", "target": "sm8650 CPU", "outcome": "success", "p50": 267.616, "p95": 333.14979999999997, "cv": 0.09686192741810068, "size": null, "rss": 452.74609375, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S24 (Family)\" --compute-unit cpu"}, {"id": "1b571f64d72ac30e", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "google-tensor-g4 ALL", "outcome": "success", "p50": 303.764, "p95": 311.34479999999996, "cv": 0.028657900922823384, "size": null, "rss": 445.734375, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Google Pixel 9\" --compute-unit all"}, {"id": "10e2f956a560dba7", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "google-tensor-g2 ALL", "outcome": "success", "p50": 328.492, "p95": 415.85379999999986, "cv": 0.185335113928607, "size": null, "rss": 430.40234375, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Google Pixel 7\" --compute-unit all"}, {"id": "95371c2b917ffb0a", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "samsung-exynos-990 ALL", "outcome": "success", "p50": 351.444, "p95": 370.1158, "cv": 0.06074429219892825, "size": null, "rss": 461.50390625, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy Note 20 (Intl)\" --compute-unit all"}, {"id": "f2dc5d6a22171d6c", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm8350 ALL", "outcome": "success", "p50": 380.068, "p95": 406.99579999999975, "cv": 0.06650399145212688, "size": null, "rss": 457.796875, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy S21\" --compute-unit all"}, {"id": "5cfcb6a61a5ccee2", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "google-tensor-g3 ALL", "outcome": "success", "p50": 444.124, "p95": 557.4658, "cv": 0.1644428547358723, "size": null, "rss": 441.70703125, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Google Pixel 8\" --compute-unit all"}, {"id": "ba342cfc0d34dc04", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sm7250 ALL", "outcome": "success", "p50": 750.98, "p95": 756.6776, "cv": 0.02241890153849294, "size": null, "rss": 420.1015625, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Google Pixel 5\" --compute-unit all"}, {"id": "5c18d4254b9767db", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "samsung-exynos-1280 ALL", "outcome": "success", "p50": 780.786, "p95": 811.0482, "cv": 0.021386126573284585, "size": null, "rss": 450.53125, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Samsung Galaxy A53 5G\" --compute-unit all"}, {"id": "ee123ad88eb89b5b", "name": "vit-base-patch16-224-in21k \u00b7 ALL", "model": "vit-base-patch16-224-in21k", "recipe": "ALL", "target": "sdm845 ALL", "outcome": "success", "p50": 820.371, "p95": 841.6846, "cv": 0.04194878674972942, "size": null, "rss": 428.77734375, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:google/vit-base-patch16-224-in21k --device \"Google Pixel 3\" --compute-unit all"}, {"id": "63ca192c3da80236", "name": "toxic-comment-model \u00b7 ort-cpu-int8-dyn", "model": "toxic-comment-model", "recipe": "ort-cpu-int8-dyn", "target": "Apple M2 CPU", "outcome": "success", "p50": 11.369688, "p95": 11.3916519, "cv": 0.0011574434060339647, "size": 64.19614028930664, "rss": 187.625, "cosine": 0.9999936557532698, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_cpu_int8_dynamic.yaml"}, {"id": "3a0d48f0a9254f78", "name": "toxic-comment-model \u00b7 ort-cpu-int8-perchan", "model": "toxic-comment-model", "recipe": "ort-cpu-int8-perchan", "target": "Apple M2 CPU", "outcome": "success", "p50": 11.5189165, "p95": 11.5409622, "cv": 0.0020689462532675874, "size": 64.39774131774902, "rss": 187.546875, "cosine": 0.999999570644215, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_cpu_int8_perchannel.yaml"}, {"id": "4631335d4dd123b5", "name": "toxic-comment-model \u00b7 ort-cpu-4thread", "model": "toxic-comment-model", "recipe": "ort-cpu-4thread", "target": "Apple M2 CPU", "outcome": "success", "p50": 31.9972085, "p95": 32.21275595, "cv": 0.0030460650226799947, "size": 255.49670028686523, "rss": 490.75, "cosine": 0.9999999999999949, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_cpu_4thread.yaml"}, {"id": "aeb3b3cb683c2a84", "name": "toxic-comment-model \u00b7 ort-cpu-fp32", "model": "toxic-comment-model", "recipe": "ort-cpu-fp32", "target": "Apple M2 CPU", "outcome": "success", "p50": 32.094271, "p95": 32.152408449999996, "cv": 0.0009253951423142853, "size": 255.49670028686523, "rss": 490.46875, "cosine": 0.9999999999999949, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_cpu_fp32.yaml"}, {"id": "108894f0e636da6e", "name": "toxic-comment-model \u00b7 ort-cpu-dynamic", "model": "toxic-comment-model", "recipe": "ort-cpu-dynamic", "target": "Apple M2 CPU", "outcome": "success", "p50": 33.374333500000006, "p95": 33.46831425, "cv": 0.0024526712828388383, "size": 255.53692722320557, "rss": 490.9375, "cosine": 0.999999999999995, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_cpu_dynamic.yaml"}, {"id": "fea98d91e25cdd0a", "name": "toxic-comment-model \u00b7 ort-cpu-fp16", "model": "toxic-comment-model", "recipe": "ort-cpu-fp16", "target": "Apple M2 CPU", "outcome": "success", "p50": 35.535895499999995, "p95": 35.6486019, "cv": 0.0020197032707432987, "size": 127.81866073608398, "rss": 522.90625, "cosine": 0.9999999994197334, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_cpu_fp16.yaml"}, {"id": "741a8f73a118bcda", "name": "toxic-comment-model \u00b7 ort-coreml-fp16", "model": "toxic-comment-model", "recipe": "ort-coreml-fp16", "target": "Apple M2 CoreML", "outcome": "success", "p50": 35.649812499999996, "p95": 35.735243749999995, "cv": 0.0018652068820560381, "size": 127.81866073608398, "rss": 495.015625, "cosine": 0.9999999994197334, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_coreml_fp16.yaml"}, {"id": "2eaf7cac7c787564", "name": "toxic-comment-model \u00b7 ort-coreml-fp32", "model": "toxic-comment-model", "recipe": "ort-coreml-fp32", "target": "Apple M2 CoreML", "outcome": "success", "p50": 39.5099375, "p95": 40.443108699999996, "cv": 0.035581870475372895, "size": 255.49670028686523, "rss": 1185.96875, "cosine": 0.9999999999654097, "fbAuth": null, "fbRun": 37.0569, "parts": 32, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_coreml_fp32.yaml"}, {"id": "71b3708debfecd57", "name": "toxic-comment-model \u00b7 ort-coreml-ane", "model": "toxic-comment-model", "recipe": "ort-coreml-ane", "target": "Apple M2 CoreML", "outcome": "success", "p50": 41.227791499999995, "p95": 41.41176495, "cv": 0.04384533375689982, "size": 255.49670028686523, "rss": 1183.5625, "cosine": 0.9999999999654097, "fbAuth": null, "fbRun": 38.8469, "parts": 32, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_coreml_ane.yaml"}, {"id": "a20d09833db71574", "name": "toxic-comment-model \u00b7 ort-coreml-dynamic", "model": "toxic-comment-model", "recipe": "ort-coreml-dynamic", "target": "Apple M2 CoreML", "outcome": "success", "p50": 53.9333335, "p95": 54.44392295, "cv": 0.00844133125988865, "size": 255.53692722320557, "rss": 1267.0625, "cosine": 0.9999999999999994, "fbAuth": null, "fbRun": 22.8226, "parts": 45, "repro": "uv run edgefit measure --model hf:martin-ha/toxic-comment-model --recipe recipes/ort_coreml_dynamic.yaml"}, {"id": "a8c52a67d34453d7", "name": "Llama-3.2-1B-Instruct \u00b7 ort-cpu-dynamic", "model": "Llama-3.2-1B-Instruct", "recipe": "ort-cpu-dynamic", "target": "Apple M2 CPU", "outcome": "success", "p50": null, "p95": null, "cv": null, "size": 5716.997026443481, "rss": 5810.046875, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:meta-llama/Llama-3.2-1B-Instruct --recipe recipes/ort_cpu_dynamic.yaml"}, {"id": "cce1b91cfda0b535", "name": "Llama-3.2-1B-Instruct \u00b7 ort-coreml-dynamic", "model": "Llama-3.2-1B-Instruct", "recipe": "ort-coreml-dynamic", "target": "Apple M2 CoreML", "outcome": "success", "p50": null, "p95": null, "cv": null, "size": 5716.997026443481, "rss": 8000.359375, "cosine": null, "fbAuth": null, "fbRun": 15.0145, "parts": 129, "repro": "uv run edgefit measure --model hf:meta-llama/Llama-3.2-1B-Instruct --recipe recipes/ort_coreml_dynamic.yaml"}, {"id": "a02cbe89b6551918", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "sm8750 ALL", "outcome": "success", "p50": 2.419, "p95": 2.565199999999999, "cv": 0.04695998643017083, "size": null, "rss": 223.34765625, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Snapdragon 8 Elite QRD\" --compute-unit all"}, {"id": "791f4b8bea0c303a", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "sm8650 ALL", "outcome": "success", "p50": 2.793, "p95": 2.9543999999999997, "cv": 0.027312870089805808, "size": null, "rss": 113.12109375, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Samsung Galaxy S24 (Family)\" --compute-unit all"}, {"id": "705c1e431d3fb5b0", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "sm8650 ALL", "outcome": "success", "p50": 2.8, "p95": 2.9093999999999993, "cv": 0.01891639744662625, "size": null, "rss": 111.6328125, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Samsung Galaxy S24\" --compute-unit all"}, {"id": "567338fb728937b4", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "sm8550 ALL", "outcome": "success", "p50": 3.628, "p95": 3.7194000000000003, "cv": 0.012734144855285696, "size": null, "rss": 247.53515625, "cosine": null, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Samsung Galaxy S23\" --compute-unit all"}, {"id": "d34ca504de63bc76", "name": "clip-vit-base-patch32 \u00b7 ort-cpu-int8-dyn", "model": "clip-vit-base-patch32", "recipe": "ort-cpu-int8-dyn", "target": "Apple M2 CPU", "outcome": "success", "p50": 12.022354, "p95": 12.040368449999999, "cv": 0.0014964338727108458, "size": 83.97920417785645, "rss": 262.09375, "cosine": 0.9923240395120924, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_cpu_int8_dynamic.yaml"}, {"id": "eaf69b7be6ee911f", "name": "clip-vit-base-patch32 \u00b7 ort-cpu-int8-perchan", "model": "clip-vit-base-patch32", "recipe": "ort-cpu-int8-perchan", "target": "Apple M2 CPU", "outcome": "success", "p50": 12.1224375, "p95": 12.181643900000001, "cv": 0.002711787153426996, "size": 84.37505531311035, "rss": 181.171875, "cosine": 0.9910207594148245, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_cpu_int8_perchannel.yaml"}, {"id": "219a8756921e8ac7", "name": "clip-vit-base-patch32 \u00b7 ort-coreml-fp32", "model": "clip-vit-base-patch32", "recipe": "ort-coreml-fp32", "target": "Apple M2 CoreML", "outcome": "success", "p50": 18.0329165, "p95": 19.1785936, "cv": 0.03473332544279845, "size": 333.7139415740967, "rss": 641.515625, "cosine": 0.9999155030878719, "fbAuth": 97.1719, "fbRun": 8.1762, "parts": 50, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_coreml_fp32.yaml"}, {"id": "ee1d8c12c595319b", "name": "clip-vit-base-patch32 \u00b7 ort-coreml-ane", "model": "clip-vit-base-patch32", "recipe": "ort-coreml-ane", "target": "Apple M2 CoreML", "outcome": "success", "p50": 18.367187, "p95": 19.1584356, "cv": 0.022128317458308542, "size": 333.7139415740967, "rss": 612.5, "cosine": 0.9999155030878719, "fbAuth": 97.1719, "fbRun": 9.5542, "parts": 50, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_coreml_ane.yaml"}, {"id": "c7cab06a1a13f1e2", "name": "clip-vit-base-patch32 \u00b7 ort-cpu-fp32", "model": "clip-vit-base-patch32", "recipe": "ort-cpu-fp32", "target": "Apple M2 CPU", "outcome": "success", "p50": 28.3473125, "p95": 28.3743856, "cv": 0.0008629556158029169, "size": 333.7139415740967, "rss": 436.125, "cosine": 0.9999999999899454, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_cpu_fp32.yaml"}, {"id": "4a4a6ab62fb65bc5", "name": "clip-vit-base-patch32 \u00b7 ort-cpu-4thread", "model": "clip-vit-base-patch32", "recipe": "ort-cpu-4thread", "target": "Apple M2 CPU", "outcome": "success", "p50": 28.348166499999998, "p95": 28.38396265, "cv": 0.00120007445533461, "size": 333.7139415740967, "rss": 436.40625, "cosine": 0.9999999999899454, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_cpu_4thread.yaml"}, {"id": "7192ac0f298f2bbc", "name": "clip-vit-base-patch32 \u00b7 ort-cpu-dynamic", "model": "clip-vit-base-patch32", "recipe": "ort-cpu-dynamic", "target": "Apple M2 CPU", "outcome": "success", "p50": 28.597063, "p95": 28.6427773, "cv": 0.000978127867920232, "size": 333.77053451538086, "rss": 474.1875, "cosine": 0.999999999992275, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_cpu_dynamic.yaml"}, {"id": "1fea9e4aa352bc85", "name": "clip-vit-base-patch32 \u00b7 ort-coreml-dynamic", "model": "clip-vit-base-patch32", "recipe": "ort-coreml-dynamic", "target": "Apple M2 CoreML", "outcome": "success", "p50": 46.2418545, "p95": 52.335514249999996, "cv": 0.05713503308934461, "size": 333.77053451538086, "rss": 679.84375, "cosine": 0.9999260736670353, "fbAuth": null, "fbRun": 31.7339, "parts": 74, "repro": "uv run edgefit measure --model hf:openai/clip-vit-base-patch32 --recipe recipes/ort_coreml_dynamic.yaml"}, {"id": "0c92d855c6654f5b", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "google-tensor-g2 ALL", "outcome": "success", "p50": 64.587, "p95": 68.03739999999999, "cv": 0.022274760477063872, "size": null, "rss": 421.9453125, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Google Pixel 7\" --compute-unit all"}, {"id": "0de22baa6ff49e8f", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "google-tensor-g4 ALL", "outcome": "success", "p50": 84.76, "p95": 93.33999999999999, "cv": 0.06131200874178385, "size": null, "rss": 434.59375, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Google Pixel 9\" --compute-unit all"}, {"id": "8dbaefa957ad8df3", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "samsung-exynos-990 ALL", "outcome": "success", "p50": 93.946, "p95": 109.24799999999996, "cv": 0.1050023675590486, "size": null, "rss": 442.796875, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Samsung Galaxy Note 20 (Intl)\" --compute-unit all"}, {"id": "b2cfb775950b04ac", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "google-tensor-g3 ALL", "outcome": "success", "p50": 96.606, "p95": 103.0184, "cv": 0.05176490600799087, "size": null, "rss": 425.29296875, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Google Pixel 8\" --compute-unit all"}, {"id": "c560d29e0123d406", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "sm8350 ALL", "outcome": "success", "p50": 96.828, "p95": 122.96259999999995, "cv": 0.14056785713016676, "size": null, "rss": 440.921875, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Samsung Galaxy S21\" --compute-unit all"}, {"id": "2582c428b5e22ed0", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "samsung-exynos-1280 ALL", "outcome": "success", "p50": 178.655, "p95": 190.89860000000002, "cv": 0.07167338627863817, "size": null, "rss": 434.21875, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Samsung Galaxy A53 5G\" --compute-unit all"}, {"id": "dcc23f374284e377", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "sm7250 ALL", "outcome": "success", "p50": 188.76, "p95": 190.628, "cv": 0.013457808293217813, "size": null, "rss": 403.0078125, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Google Pixel 5\" --compute-unit all"}, {"id": "1cc6121632b02ea2", "name": "clip-vit-base-patch32 \u00b7 ALL", "model": "clip-vit-base-patch32", "recipe": "ALL", "target": "sdm845 ALL", "outcome": "success", "p50": 204.639, "p95": 215.09939999999997, "cv": 0.04348870914601628, "size": null, "rss": 440.078125, "cosine": null, "fbAuth": null, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure-remote --model hf:openai/clip-vit-base-patch32 --device \"Google Pixel 3\" --compute-unit all"}, {"id": "7daffd3103581724", "name": "all-MiniLM-L6-v2 \u00b7 ort-cpu-int8-dyn", "model": "all-MiniLM-L6-v2", "recipe": "ort-cpu-int8-dyn", "target": "Apple M2 CPU", "outcome": "success", "p50": 4.4694994999999995, "p95": 4.4817859, "cv": 0.0025161654124848235, "size": 21.754246711730957, "rss": 124.40625, "cosine": 0.9784670670144379, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_int8_dynamic.yaml"}, {"id": "fba03ff7ed5c012d", "name": "all-MiniLM-L6-v2 \u00b7 ort-cpu-int8-perchan", "model": "all-MiniLM-L6-v2", "recipe": "ort-cpu-int8-perchan", "target": "Apple M2 CPU", "outcome": "success", "p50": 4.491562500000001, "p95": 4.504946350000001, "cv": 0.002010571888956861, "size": 21.85329532623291, "rss": 125.703125, "cosine": 0.9923734363110422, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_int8_perchannel.yaml"}, {"id": "063282c38170434b", "name": "all-MiniLM-L6-v2 \u00b7 ort-cpu-fp32", "model": "all-MiniLM-L6-v2", "recipe": "ort-cpu-fp32", "target": "Apple M2 CPU", "outcome": "success", "p50": 9.624812, "p95": 9.65025175, "cv": 0.0024338346625335477, "size": 86.15383625030518, "rss": 227.859375, "cosine": 0.9999999999994253, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_fp32.yaml"}, {"id": "0ab9fa73756ca9e1", "name": "all-MiniLM-L6-v2 \u00b7 ort-cpu-4thread", "model": "all-MiniLM-L6-v2", "recipe": "ort-cpu-4thread", "target": "Apple M2 CPU", "outcome": "success", "p50": 9.898792, "p95": 11.165918899999998, "cv": 0.057821897363589385, "size": 86.15383625030518, "rss": 232.96875, "cosine": 0.9999999999994253, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_4thread.yaml"}, {"id": "9bd545fef7ea2580", "name": "all-MiniLM-L6-v2 \u00b7 ort-cpu-dynamic", "model": "all-MiniLM-L6-v2", "recipe": "ort-cpu-dynamic", "target": "Apple M2 CPU", "outcome": "success", "p50": 10.3820835, "p95": 10.4222462, "cv": 0.0019475536176394488, "size": 86.18834590911865, "rss": 221.796875, "cosine": 0.999999999999599, "fbAuth": null, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_dynamic.yaml"}, {"id": "64bb720beeccf615", "name": "all-MiniLM-L6-v2 \u00b7 ort-coreml-fp16", "model": "all-MiniLM-L6-v2", "recipe": "ort-coreml-fp16", "target": "Apple M2 CoreML", "outcome": "success", "p50": 11.4021045, "p95": 11.42299825, "cv": 0.0010952656326142555, "size": 43.139803886413574, "rss": 230.203125, "cosine": 0.999999464305703, "fbAuth": 99.7967, "fbRun": 100.0, "parts": null, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_fp16.yaml"}, {"id": "277ca1897cf2fe0d", "name": "all-MiniLM-L6-v2 \u00b7 ort-cpu-fp16", "model": "all-MiniLM-L6-v2", "recipe": "ort-cpu-fp16", "target": "Apple M2 CPU", "outcome": "success", "p50": 11.733791499999999, "p95": 12.386294049999998, "cv": 0.030299127569156706, "size": 43.139803886413574, "rss": 241.0625, "cosine": 0.999999464305703, "fbAuth": 0.0, "fbRun": 0.0, "parts": null, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_fp16.yaml"}, {"id": "c55ef26b7637575c", "name": "all-MiniLM-L6-v2 \u00b7 ort-coreml-fp32", "model": "all-MiniLM-L6-v2", "recipe": "ort-coreml-fp32", "target": "Apple M2 CoreML", "outcome": "success", "p50": 20.111020500000002, "p95": 20.222001749999997, "cv": 0.006201424516108605, "size": 86.15383625030518, "rss": 631.03125, "cosine": 0.9999992040075125, "fbAuth": 99.4579, "fbRun": 29.5421, "parts": 31, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_fp32.yaml"}, {"id": "388f002aca2469be", "name": "all-MiniLM-L6-v2 \u00b7 ort-coreml-ane", "model": "all-MiniLM-L6-v2", "recipe": "ort-coreml-ane", "target": "Apple M2 CoreML", "outcome": "success", "p50": 20.9387915, "p95": 21.03167515, "cv": 0.0030242911765535857, "size": 86.15383625030518, "rss": 598.03125, "cosine": 0.9999992040075125, "fbAuth": 99.4579, "fbRun": 30.0434, "parts": 31, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_ane.yaml"}, {"id": "b33158c6d8101373", "name": "all-MiniLM-L6-v2 \u00b7 ort-coreml-dynamic", "model": "all-MiniLM-L6-v2", "recipe": "ort-coreml-dynamic", "target": "Apple M2 CoreML", "outcome": "success", "p50": 21.814125, "p95": 21.88556455, "cv": 0.0024155478886865142, "size": 86.18834590911865, "rss": 625.9375, "cosine": 0.999999999999612, "fbAuth": null, "fbRun": 10.4221, "parts": 44, "repro": "uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_dynamic.yaml"}]</script>
+<script>
+(function () {
+  var rows = JSON.parse(document.getElementById('rows').textContent);
+  var a = document.getElementById('a'), b = document.getElementById('b');
+  rows.forEach(function (r, i) {
+    [a, b].forEach(function (sel) {
+      var o = document.createElement('option');
+      o.value = r.id; o.textContent = r.name + '  (' + r.target + ')';
+      sel.appendChild(o);
+    });
+  });
+  var params = new URLSearchParams(location.search);
+  a.value = params.get('a') || (rows[0] && rows[0].id);
+  b.value = params.get('b') || (rows[1] && rows[1].id) || a.value;
+
+  function fmt(v, d, s) { return v === null || v === undefined ? '—' : v.toFixed(d) + (s || ''); }
+  function delta(x, y, lowerBetter) {
+    if (x === null || y === null || x === undefined || y === undefined || !y) return '—';
+    var r = x / y;
+    if (Math.abs(r - 1) < 0.005) return '<span class="dim">same</span>';
+    var better = lowerBetter ? r < 1 : r > 1;
+    var f = r < 1 ? (1 / r).toFixed(2) + '× lower' : r.toFixed(2) + '× higher';
+    return '<span class="' + (better ? 'win' : 'lose') + '">' + f + '</span>';
+  }
+  function render() {
+    var x = rows.find(function (r) { return r.id === a.value; });
+    var y = rows.find(function (r) { return r.id === b.value; });
+    if (!x || !y) return;
+    var params = new URLSearchParams({ a: x.id, b: y.id });
+    history.replaceState(null, '', '?' + params.toString());
+    var spec = [
+      ['p50 latency, ms', 'p50', 2, '', true],
+      ['p95 latency, ms', 'p95', 2, '', true],
+      ['artifact, MiB', 'size', 0, '', true],
+      ['peak RSS, MiB', 'rss', 0, '', true],
+      ['cosine vs fp32', 'cosine', 4, '', false],
+      ['FLOP fallback (as authored)', 'fbAuth', 1, '%', true],
+      ['time fallback (as run)', 'fbRun', 1, '%', true]
+    ];
+    var body = spec.map(function (s) {
+      return '<tr><td>' + s[0] + '</td>' +
+        '<td class="num">' + fmt(x[s[1]], s[2], s[3]) + '</td>' +
+        '<td class="num">' + fmt(y[s[1]], s[2], s[3]) + '</td>' +
+        '<td class="num">' + delta(x[s[1]], y[s[1]], s[4]) + '</td></tr>';
+    }).join('');
+    document.getElementById('out').innerHTML =
+      '<div class="scroll"><table><thead><tr><th></th><th class="num">' + x.name +
+      '</th><th class="num">' + y.name + '</th><th class="num">A vs B</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>' +
+      '<h3>Reproduce</h3><pre class="repro">' + x.repro + '\n' + y.repro + '</pre>';
+  }
+  a.addEventListener('change', render); b.addEventListener('change', render); render();
+})();
+</script>
+
+<footer class="site">
+edgefit 0.0.1 · harness 0.3.5 ·
+generated 2026-08-05 23:11 EDT<br>
+Corpus is append-only and immutable: a re-measurement is a new row, never an edit.
+</footer>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var saved = null;
+  try { saved = localStorage.getItem('edgefit-theme'); } catch (e) {}
+  if (saved) root.setAttribute('data-theme', saved);
+  var btn = document.querySelector('button.theme');
+  if (btn) btn.addEventListener('click', function () {
+    var dark = getComputedStyle(root).colorScheme === 'dark';
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('edgefit-theme', next); } catch (e) {}
+  });
+
+  // Table sort. Numeric columns are marked with class="num"; everything else
+  // sorts as text. A missing value always sorts last regardless of direction —
+  // "we did not measure this" is not a small number.
+  document.querySelectorAll('table[data-sortable]').forEach(function (table) {
+    var body = table.tBodies[0];
+    table.querySelectorAll('th.sortable').forEach(function (th, index) {
+      th.addEventListener('click', function () {
+        var desc = th.getAttribute('aria-sort') !== 'descending';
+        table.querySelectorAll('th').forEach(function (o) { o.removeAttribute('aria-sort'); });
+        th.setAttribute('aria-sort', desc ? 'descending' : 'ascending');
+        var numeric = th.classList.contains('num');
+        var rows = Array.prototype.slice.call(body.rows);
+        rows.sort(function (a, b) {
+          var x = a.cells[index], y = b.cells[index];
+          var av = x ? (x.dataset.v !== undefined ? x.dataset.v : x.textContent.trim()) : '';
+          var bv = y ? (y.dataset.v !== undefined ? y.dataset.v : y.textContent.trim()) : '';
+          var an = av === '' || av === '—', bn = bv === '' || bv === '—';
+          if (an && bn) return 0;
+          if (an) return 1;
+          if (bn) return -1;
+          var r = numeric ? parseFloat(av) - parseFloat(bv) : av.localeCompare(bv);
+          return desc ? -r : r;
+        });
+        rows.forEach(function (r) { body.appendChild(r); });
+      });
+    });
+  });
+
+  // Filters. Each control names the table it drives via data-target.
+  function applyFilters(table) {
+    var text = (document.querySelector('[data-filter-text][data-target="' + table.id + '"]') || {}).value || '';
+    var needle = text.toLowerCase();
+    var selects = document.querySelectorAll('[data-filter-key][data-target="' + table.id + '"]');
+    var shown = 0;
+    Array.prototype.forEach.call(table.tBodies[0].rows, function (row) {
+      var ok = !needle || row.textContent.toLowerCase().indexOf(needle) !== -1;
+      Array.prototype.forEach.call(selects, function (sel) {
+        if (ok && sel.value) ok = row.dataset[sel.dataset.filterKey] === sel.value;
+      });
+      row.hidden = !ok;
+      if (ok) shown++;
+    });
+    var out = document.querySelector('[data-count][data-target="' + table.id + '"]');
+    if (out) out.textContent = shown + ' of ' + table.tBodies[0].rows.length + ' rows';
+  }
+  document.querySelectorAll('[data-target]').forEach(function (control) {
+    if (!control.dataset.filterText && !control.dataset.filterKey) return;
+    var table = document.getElementById(control.dataset.target);
+    if (!table) return;
+    var run = function () { applyFilters(table); };
+    control.addEventListener('input', run);
+    control.addEventListener('change', run);
+  });
+  document.querySelectorAll('table[data-sortable]').forEach(applyFilters);
+})();
+</script>
+</body>
+</html>

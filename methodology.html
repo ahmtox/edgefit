@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Methodology · EdgeFit Atlas</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --good-text: #006300;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --good-text: #0ca30c;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 1.5rem 5rem; background: var(--plane); color: var(--ink);
+  font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+a { color: var(--series-1); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; letter-spacing: -0.005em; }
+h3 { font-size: .95rem; margin: 1.75rem 0 .5rem; color: var(--ink-2); }
+p { margin: .5rem 0; color: var(--ink-2); max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: .85em; }
+
+header.site { padding: 2rem 0 0; }
+nav.site { display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;
+  padding: .75rem 0 1.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+nav.site a { color: var(--ink-2); font-size: .9rem; }
+nav.site a.here { color: var(--ink); font-weight: 600; }
+nav.site .spacer { flex: 1; }
+button.theme { background: none; border: 1px solid var(--border); color: var(--ink-2);
+  border-radius: 6px; padding: .25rem .6rem; cursor: pointer; font: inherit; font-size: .8rem; }
+
+.banner { border: 1px solid var(--border); border-left: 3px solid var(--warning);
+  background: var(--surface-1); border-radius: 6px; padding: .85rem 1rem; margin: 1.25rem 0; }
+.banner strong { color: var(--ink); }
+.banner p { margin: .25rem 0 0; font-size: .9rem; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .75rem; margin: 1.5rem 0; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: .85rem 1rem; }
+.tile .v { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; display: block; }
+.tile .k { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1.1rem 1.25rem; margin: 1rem 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; }
+th { text-align: left; font-weight: 600; font-size: .78rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; padding: .6rem .7rem;
+  border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0;
+  background: var(--surface-1); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--ink); }
+th[aria-sort]::after { content: " ↑"; }
+th[aria-sort="descending"]::after { content: " ↓"; }
+td { padding: .5rem .7rem; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--plane); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dim { color: var(--muted); }
+.win { color: var(--good-text); font-weight: 600; }
+.lose { color: var(--critical); font-weight: 600; }
+
+.badge { display: inline-flex; align-items: center; gap: .3rem; font-size: .75rem;
+  padding: .1rem .45rem; border-radius: 4px; border: 1px solid var(--border);
+  white-space: nowrap; }
+.badge.ok { color: var(--good-text); }
+.badge.fail { color: var(--critical); }
+
+/* Not our measurement. Marked wherever a number appears, because the whole point of
+   separating third-party figures in the corpus is that they stay separated on sight. */
+.thirdparty { font-size: .7rem; font-weight: 600; letter-spacing: .04em;
+  padding: 0 .3rem; border-radius: 3px; border: 1px solid var(--border);
+  color: var(--muted); cursor: help; text-decoration: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+.controls { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: 1rem 0 .75rem; }
+.controls input, .controls select { font: inherit; font-size: .875rem; padding: .35rem .55rem;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--ink); }
+.controls input { min-width: 15rem; }
+.count { color: var(--muted); font-size: .85rem; }
+
+.legend { display: flex; gap: 1rem; flex-wrap: wrap; margin: .25rem 0 .75rem;
+  font-size: .82rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: .4rem; }
+
+figure { margin: 1rem 0 1.5rem; }
+figcaption { font-size: .82rem; color: var(--muted); margin-top: .4rem; }
+svg { display: block; max-width: 100%; height: auto; }
+svg text { font-family: var(--sans); }
+
+pre.repro { background: var(--plane); border: 1px solid var(--border); border-radius: 6px;
+  padding: .6rem .7rem; overflow-x: auto; font-family: var(--mono); font-size: .78rem;
+  color: var(--ink-2); margin: .35rem 0 0; }
+details summary { cursor: pointer; color: var(--ink-2); font-size: .85rem; }
+footer.site { margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: .82rem; }
+ul { color: var(--ink-2); max-width: 68ch; }
+li { margin: .3rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site"><h1><a href="" style="color:inherit">EdgeFit Atlas</a></h1>
+<p style="margin:0">Measured on-device inference.
+Every number reproducible; every failure recorded.</p></header>
+<nav class="site"><a href="">The matrix</a><a href="models/">Models</a><a href="devices/">Devices</a><a href="compare.html">Compare</a><a href="methodology.html" class="here">Methodology</a><a href="data/">Data</a><span class="spacer"></span>
+<button class="theme" type="button">theme</button></nav>
+
+<div class="banner"><strong>Read this before citing anything here.</strong><p>These 110 measurements do not all come from the same place, and the conditions behind them differ.</p><p>80 of them were measured by us on <em>one</em> laptop-class
+machine, gated for AC power, low-power mode off, nominal thermal state and verified
+available compute — but there is no second unit of the same SKU to cross-check
+against, so the <a href="methodology.html#two-unit">two-unit test</a> has not been
+run. Treat those as dev-grade figures that are honest about their own conditions, not
+as lab results. Laptop thermals also differ from a rack-mounted machine.</p><p>30 rows were measured on <strong>Qualcomm AI Hub</strong>'s hosted
+phones, marked <span class="thirdparty">3P</span> throughout. Our own gating does not
+apply to them: their thermal state is not exposed, the run count is theirs, and their
+timing excludes model load and host-side framework overhead, so those rows read faster
+than ours by an unknown margin. See
+<a href="methodology.html#thirdparty">what we do and do not know about them</a>.</p></div>
+<h2>Methodology</h2>
+<p>This page exists so you can decide how much to trust the numbers without taking
+our word for anything. Where a claim can be checked against the data, the data is
+linked. Where something is unknown, it says so.</p>
+
+<h3 id="runs">Runs and variance</h3>
+<p>Every measurement is <strong>at least 5 timed runs</strong> after discarded
+warmups, and the variance is recorded. This is enforced in the type system, not by
+convention: a record claiming success without a timing distribution of five or more
+samples fails validation and cannot be written. The aggregate statistics are
+recomputed from the raw samples on load and rejected if they disagree, so a variance
+figure that did not come from measured data is not representable.</p>
+<p>In this corpus: 10 timed runs per measurement, 3 discarded warmups, median
+coefficient of variation <strong>0.5%</strong>, worst
+<strong>18.5%</strong>. Warmups are discarded because the first inference
+includes lazy kernel compilation and delegate model caching — a real cost, but a
+different one from steady-state latency.</p>
+
+<h3 id="thirdparty">Rows we did not measure ourselves</h3>
+<p>Some rows come from <strong>Qualcomm AI Hub</strong>, which runs a submitted model on
+real phones in its own racks. They are marked <abbr class="thirdparty"
+title="not our measurement">3P</abbr> wherever they appear, and the mark's tooltip
+names the job that produced them. Everything on this page about our gate, our thermal
+probe and our warmup policy describes <em>our</em> devices and says nothing about
+theirs.</p>
+<p>What is genuinely theirs, and therefore unknown to us:</p>
+<ul>
+<li><strong>Thermal state and device conditions.</strong> Not exposed. Recorded as
+    <span class="mono">stress_profile = unknown</span> rather than assumed to be a
+    quiet device. It is not a clean-bench row and does not claim to be.</li>
+<li><strong>The run count is theirs.</strong> AI Hub returns ~100 raw per-run samples,
+    so hard rule #2 is satisfied natively rather than waived — these are real
+    distributions, not a vendor's single headline figure. We discard the first three as
+    warmup, matching our own policy so the variance figures stay comparable.</li>
+<li><strong>The timing is not end-to-end.</strong> It is AI Hub's on-device inference
+    time, which excludes model load and host-side framework overhead. Hard rule #4 says
+    measure end-to-end, and this does not — so these rows read <em>faster</em> than
+    ours by an unknown margin, and a cross-vendor gap should not be read as purely a
+    hardware difference. Load times are recorded separately.</li>
+<li><strong>Artifact size is unknown.</strong> AI Hub compiles server-side, and compile
+    jobs are currently rejected for this account, so the deployed artifact is not
+    something we can weigh.</li>
+</ul>
+<p>One thing they give us that no silicon vendor publishes about a rival: per-node
+<span class="mono">compute_unit</span>, so silent fallback is measurable on a second
+vendor with the same method as the first.</p>
+<p>A caveat that cost us a pass: profile jobs <strong>synthesize their own random
+inputs</strong>. For a model taking float inputs that is harmless. For one taking
+integer <em>indices</em> — token ids, token types — a random value is out of bounds for
+the embedding it indexes, and the job fails with an error that looks like the device
+refusing the model. It is not. We now refuse to submit such models rather than record
+a failure against hardware that did nothing wrong, which is why the text models
+measured on our own devices have no Snapdragon rows here.</p>
+
+<h3 id="gate">The gate: we refuse rather than annotate</h3>
+<p>Before every measurement the host is checked, and if it fails the measurement does
+not happen. The refusal is itself recorded as a row. The reasoning is that a missing
+number is recoverable and a wrong number is not: a run on a warm, busy,
+battery-powered laptop produces a figure that looks entirely reasonable and is
+worthless.</p>
+<ul>
+<li><strong>AC power</strong> — battery changes DVFS behaviour and thermal headroom.</li>
+<li><strong>Low-power mode off</strong> — and <em>unknown</em> counts as a failure. An
+    unverifiable power policy can halve clocks.</li>
+<li><strong>Thermal state nominal</strong> — via <span class="mono">NSProcessInfo</span>,
+    four buckets.</li>
+<li><strong>Available memory</strong> — above 2 GiB, so memory pressure does not
+    distort allocation.</li>
+<li><strong>Verified available compute</strong> — see the probe below.</li>
+</ul>
+<p>We found the value of this the hard way. Measuring the same recipes on a contended
+host and then on a quiet one moved median latency by about 10% and moved the
+coefficient of variation by an order of magnitude — from 2.8&ndash;31.7% down to
+0.3&ndash;3.8%. The contended numbers were not obviously wrong. They were quietly
+wrong, which is worse.</p>
+
+<h3 id="probe">The throttle probe, because there is no thermometer</h3>
+<p>Apple Silicon exposes <strong>no unprivileged temperature reading</strong>.
+<span class="mono">pmset -g therm</span> returns nothing, the Intel
+<span class="mono">xcpm</span> sysctls do not exist on ARM, and
+<span class="mono">powermetrics</span> requires root. Rather than publish a number we
+cannot obtain, we measure the thing we actually care about: a fixed deterministic
+matmul is timed immediately before each measurement and compared against this unit's
+own recorded healthy throughput. A machine that has got slower is throttled or
+contended, whatever any sensor claims.</p>
+<p>The baseline is a low percentile of recent healthy samples, not the fastest time
+ever seen. An all-time minimum turned out to be a ratchet: one unusually quiet moment
+recorded 7.63&nbsp;ms against a normal healthy figure near 8.4&nbsp;ms, and after that
+the machine could never satisfy its own threshold again. The ratio is recorded on
+every row as <span class="mono">calibration_ratio</span>, so you can re-filter more
+strictly than we did.</p>
+<p><span class="mono">cpu_temperature_c</span> is null on every row, with the reason
+attached. That is the honest state of the art on this hardware.</p>
+
+<h3 id="fallback">Two fallback reports, because one of them lies</h3>
+<p>When a delegate claims part of a graph, the ops it could not claim quietly run on
+CPU. Nothing errors. That is the failure mode this project was built to find, and
+measuring it turned out to be subtler than expected.</p>
+<p>We report it two ways, because they answer different questions:</p>
+<ul>
+<li><strong>As authored</strong> — analysed with graph optimisation disabled, so
+    profile node names still map to the model you wrote. This is the report that tells
+    you <em>which ops to fix</em>, and it carries a FLOP-weighted share.</li>
+<li><strong>As run</strong> — analysed at the recipe's own optimisation level, which
+    is what actually executed. Fusion destroys node names, so FLOP attribution is
+    withheld here rather than guessed; it carries measured time share and partition
+    count.</li>
+</ul>
+<p>Both are necessary because the two differ materially. On ViT-base, moving from
+optimisation level <span class="mono">disabled</span> to <span class="mono">all</span>
+cut CPU node count from 244 to 86 and lifted the accelerator's time share from 53.7%
+to 81.5%. A fallback figure taken from the unoptimized graph is a faithful measurement
+of a graph that never runs.</p>
+<p>This matters for reading the matrix: <strong>the FLOP-share column does not predict
+whether the accelerator helps.</strong> It reads 97&ndash;99.8% for every model we have
+measured and separates nothing. The as-run time share does separate them. We publish
+both, labelled, rather than quietly dropping the one that turned out to be the wrong
+tool.</p>
+<p>One further caution: time share is not an efficiency measure. It says where the
+time went, not whether sending that work to the accelerator was a good idea. A model
+can spend 70% of its time inside the accelerator and still be twice as slow as plain
+CPU.</p>
+
+<h3 id="cosine">Cosine is a numerics check, not accuracy</h3>
+<p>Quantized recipes carry a cosine similarity against the fp32 PyTorch reference
+captured at export time. It exists so the quantization column has a cost beside its
+speedup — &ldquo;int8 is twice as fast&rdquo; with no cost column is a half-truth.</p>
+<p>It is <strong>not task accuracy.</strong> A model can hold cosine 0.999 globally and
+fail badly on the one slice a customer cares about. Real eval-set accuracy is a
+separate tier that is not built yet, and the field is null with that reason attached
+rather than filled in with this number.</p>
+
+<h3 id="graph-parameters">Graph parameters are counted as exported</h3>
+<p>Parameter counts here are the initializers in the exported ONNX graph, which is not
+always the number on the model card. Llama-3.2-1B reports <strong>1498.5M</strong>
+against a card value near 1236M, and the 262.5M difference is exactly one embedding
+matrix (128256 &times; 2048): <code>torch.onnx.export</code> un-ties the tied
+embedding, materialising it once as <code>embed_tokens.weight</code> and again as the
+output projection's weight.</p>
+<p>That is a real property of the artifact, not a measurement error — those bytes are
+in the file and a deployment pipeline moves them. In fp32 it is about
+<strong>1.05 GB of the 5.6 GB artifact</strong>, roughly a fifth of it, spent on a
+duplicate. We report the count as exported rather than the card value because the
+former is what ships.</p>
+
+<h3 id="generative">Generative models report two phases, never one average</h3>
+<p>A decoder has no single latency. Prefill consumes the whole prompt in one
+compute-bound pass and yields <strong>time to first token</strong>; decode then emits
+one token at a time, bound by memory bandwidth as it re-reads the KV cache and the
+weights. We report both distributions separately and never average them, because the
+average describes neither phase — and that average is the figure most often quoted.</p>
+<p>The KV cache is threaded explicitly through the graph: each step feeds the previous
+step&rsquo;s <code>present</code> tensors back in as <code>past</code>. Without it every
+step would reprocess the whole sequence, decode cost would grow quadratically, and any
+tokens-per-second figure would be fiction.</p>
+<p><strong>Quality is exact token agreement</strong>, not a float tolerance. Greedy
+decoding through the exported graph must reproduce the identical token sequence to
+fp32 PyTorch. That check earned its place immediately: our first working export scored
+25% because <code>position_ids</code> was not an explicit graph input, so the tracer
+baked prefill&rsquo;s rotary positions in and every decode step computed them at the
+wrong offset. The text stayed fluent; it was simply different text. Every tolerance on
+logits would have passed it.</p>
+<p><code>sustained_tok_s_5min</code> is null everywhere. Sustained throughput is a
+thermal-soak measurement belonging to the stress bench, and a thirty-second stand-in
+would misrepresent it.</p>
+
+<h3 id="memory">Peak memory</h3>
+<p>Each measurement runs in a fresh child process which reports its own peak resident
+size, so the figure is attributable to that recipe alone. The parent deliberately does
+not read the aggregate child usage, which is a running maximum across every child that
+ever exited and would blame one heavy recipe's memory on every lighter one measured
+afterwards.</p>
+<p>A platform detail worth stating because it is a classic silent error:
+<span class="mono">ru_maxrss</span> is reported in <em>bytes</em> on macOS and in
+<em>kilobytes</em> on Linux. Nothing in the API says so, and both produce believable
+numbers. There is a regression test that allocates a known amount and checks the
+result lands near it.</p>
+
+<h3 id="failures">Failures are published</h3>
+<p>22 of 110 rows in this corpus are failures, and
+they are in the data download along with everything else. A recipe that will not lower,
+or a delegate that aborts the process outright, is a fact about the toolchain that is
+expensive to rediscover.</p>
+<p>Both stages of every measurement run out of process, which is what makes this
+possible: a delegate that crashes the interpreter becomes a recorded row instead of a
+dead run with nothing to show. We found this necessary rather than theoretical — one
+vendor flag combination aborts the process on every model we have tried it on.</p>
+
+<h3 id="known-answer">The known-answer test</h3>
+<p>The gate that everything else depends on. Each exported model ships with the fp32
+PyTorch output for a fixed input, and the runtime's fp32 output must reproduce it to a
+cosine of 0.9999 or better. This is what catches a silently wrong kernel — the failure
+that would make every number here worthless while every latency figure still looked
+plausible.</p>
+
+<h3 id="two-unit">What we do not know</h3>
+<p>Stated plainly, because a methodology page that only lists strengths is marketing.</p>
+<ul>
+<li><strong>No two-unit test.</strong> The proper check for a measurement methodology is
+    to run the identical recipe on two physical units of the same SKU and confirm they
+    agree within stated variance. We have one machine. Repeating a measurement on the
+    same unit is strictly weaker — it cannot catch a defect in the methodology that both
+    runs share. This is the largest known gap.</li>
+<li><strong>One host, and a laptop.</strong> Laptop thermals differ from a
+    rack-mounted machine. Nothing here demonstrates the harness is even correct on a
+    second machine.</li>
+<li><strong>No power measurement.</strong> <span class="mono">power_mw</span> is null
+    everywhere; it needs instrumentation we do not have.</li>
+<li><strong>Clean bench only.</strong> Every row is
+    <span class="mono">stress_profile = clean</span>. Real devices are warm, memory
+    constrained, and running other things. That gap is reportedly large at the tail, and
+    we have not measured it.</li>
+<li><strong>No task accuracy.</strong> See the cosine note above.</li>
+<li><strong>Why vision wins and text loses is unexplained.</strong> Accelerated recipes
+    beat CPU on the vision models and lose on the text models. The as-run time share
+    correlates with the outcome, but a correlation is a description, not a mechanism.
+    We are not going to offer one until it is measured.</li>
+</ul>
+
+<h3 id="immutable">Corrections</h3>
+<p>The corpus is append-only. Measurements are never edited: a re-measurement is a new
+row carrying a new <span class="mono">harness_version</span>, and both rows stay. If we
+get something wrong, the record of having got it wrong stays too.</p>
+<p>We have already used that. An earlier version of this atlas explained the
+accelerator's losses using the FLOP-fallback figure. That explanation was wrong, and
+the section above says so.</p>
+
+<footer class="site">
+edgefit 0.0.1 · harness 0.3.5 ·
+generated 2026-08-05 23:11 EDT<br>
+Corpus is append-only and immutable: a re-measurement is a new row, never an edit.
+</footer>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var saved = null;
+  try { saved = localStorage.getItem('edgefit-theme'); } catch (e) {}
+  if (saved) root.setAttribute('data-theme', saved);
+  var btn = document.querySelector('button.theme');
+  if (btn) btn.addEventListener('click', function () {
+    var dark = getComputedStyle(root).colorScheme === 'dark';
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('edgefit-theme', next); } catch (e) {}
+  });
+
+  // Table sort. Numeric columns are marked with class="num"; everything else
+  // sorts as text. A missing value always sorts last regardless of direction —
+  // "we did not measure this" is not a small number.
+  document.querySelectorAll('table[data-sortable]').forEach(function (table) {
+    var body = table.tBodies[0];
+    table.querySelectorAll('th.sortable').forEach(function (th, index) {
+      th.addEventListener('click', function () {
+        var desc = th.getAttribute('aria-sort') !== 'descending';
+        table.querySelectorAll('th').forEach(function (o) { o.removeAttribute('aria-sort'); });
+        th.setAttribute('aria-sort', desc ? 'descending' : 'ascending');
+        var numeric = th.classList.contains('num');
+        var rows = Array.prototype.slice.call(body.rows);
+        rows.sort(function (a, b) {
+          var x = a.cells[index], y = b.cells[index];
+          var av = x ? (x.dataset.v !== undefined ? x.dataset.v : x.textContent.trim()) : '';
+          var bv = y ? (y.dataset.v !== undefined ? y.dataset.v : y.textContent.trim()) : '';
+          var an = av === '' || av === '—', bn = bv === '' || bv === '—';
+          if (an && bn) return 0;
+          if (an) return 1;
+          if (bn) return -1;
+          var r = numeric ? parseFloat(av) - parseFloat(bv) : av.localeCompare(bv);
+          return desc ? -r : r;
+        });
+        rows.forEach(function (r) { body.appendChild(r); });
+      });
+    });
+  });
+
+  // Filters. Each control names the table it drives via data-target.
+  function applyFilters(table) {
+    var text = (document.querySelector('[data-filter-text][data-target="' + table.id + '"]') || {}).value || '';
+    var needle = text.toLowerCase();
+    var selects = document.querySelectorAll('[data-filter-key][data-target="' + table.id + '"]');
+    var shown = 0;
+    Array.prototype.forEach.call(table.tBodies[0].rows, function (row) {
+      var ok = !needle || row.textContent.toLowerCase().indexOf(needle) !== -1;
+      Array.prototype.forEach.call(selects, function (sel) {
+        if (ok && sel.value) ok = row.dataset[sel.dataset.filterKey] === sel.value;
+      });
+      row.hidden = !ok;
+      if (ok) shown++;
+    });
+    var out = document.querySelector('[data-count][data-target="' + table.id + '"]');
+    if (out) out.textContent = shown + ' of ' + table.tBodies[0].rows.length + ' rows';
+  }
+  document.querySelectorAll('[data-target]').forEach(function (control) {
+    if (!control.dataset.filterText && !control.dataset.filterKey) return;
+    var table = document.getElementById(control.dataset.target);
+    if (!table) return;
+    var run = function () { applyFilters(table); };
+    control.addEventListener('input', run);
+    control.addEventListener('change', run);
+  });
+  document.querySelectorAll('table[data-sortable]').forEach(applyFilters);
+})();
+</script>
+</body>
+</html>

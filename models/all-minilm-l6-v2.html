@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>all-MiniLM-L6-v2 · EdgeFit Atlas</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --good-text: #006300;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --good-text: #0ca30c;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 1.5rem 5rem; background: var(--plane); color: var(--ink);
+  font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+a { color: var(--series-1); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; letter-spacing: -0.005em; }
+h3 { font-size: .95rem; margin: 1.75rem 0 .5rem; color: var(--ink-2); }
+p { margin: .5rem 0; color: var(--ink-2); max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: .85em; }
+
+header.site { padding: 2rem 0 0; }
+nav.site { display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;
+  padding: .75rem 0 1.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+nav.site a { color: var(--ink-2); font-size: .9rem; }
+nav.site a.here { color: var(--ink); font-weight: 600; }
+nav.site .spacer { flex: 1; }
+button.theme { background: none; border: 1px solid var(--border); color: var(--ink-2);
+  border-radius: 6px; padding: .25rem .6rem; cursor: pointer; font: inherit; font-size: .8rem; }
+
+.banner { border: 1px solid var(--border); border-left: 3px solid var(--warning);
+  background: var(--surface-1); border-radius: 6px; padding: .85rem 1rem; margin: 1.25rem 0; }
+.banner strong { color: var(--ink); }
+.banner p { margin: .25rem 0 0; font-size: .9rem; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .75rem; margin: 1.5rem 0; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: .85rem 1rem; }
+.tile .v { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; display: block; }
+.tile .k { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1.1rem 1.25rem; margin: 1rem 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; }
+th { text-align: left; font-weight: 600; font-size: .78rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; padding: .6rem .7rem;
+  border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0;
+  background: var(--surface-1); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--ink); }
+th[aria-sort]::after { content: " ↑"; }
+th[aria-sort="descending"]::after { content: " ↓"; }
+td { padding: .5rem .7rem; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--plane); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dim { color: var(--muted); }
+.win { color: var(--good-text); font-weight: 600; }
+.lose { color: var(--critical); font-weight: 600; }
+
+.badge { display: inline-flex; align-items: center; gap: .3rem; font-size: .75rem;
+  padding: .1rem .45rem; border-radius: 4px; border: 1px solid var(--border);
+  white-space: nowrap; }
+.badge.ok { color: var(--good-text); }
+.badge.fail { color: var(--critical); }
+
+/* Not our measurement. Marked wherever a number appears, because the whole point of
+   separating third-party figures in the corpus is that they stay separated on sight. */
+.thirdparty { font-size: .7rem; font-weight: 600; letter-spacing: .04em;
+  padding: 0 .3rem; border-radius: 3px; border: 1px solid var(--border);
+  color: var(--muted); cursor: help; text-decoration: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+.controls { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: 1rem 0 .75rem; }
+.controls input, .controls select { font: inherit; font-size: .875rem; padding: .35rem .55rem;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--ink); }
+.controls input { min-width: 15rem; }
+.count { color: var(--muted); font-size: .85rem; }
+
+.legend { display: flex; gap: 1rem; flex-wrap: wrap; margin: .25rem 0 .75rem;
+  font-size: .82rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: .4rem; }
+
+figure { margin: 1rem 0 1.5rem; }
+figcaption { font-size: .82rem; color: var(--muted); margin-top: .4rem; }
+svg { display: block; max-width: 100%; height: auto; }
+svg text { font-family: var(--sans); }
+
+pre.repro { background: var(--plane); border: 1px solid var(--border); border-radius: 6px;
+  padding: .6rem .7rem; overflow-x: auto; font-family: var(--mono); font-size: .78rem;
+  color: var(--ink-2); margin: .35rem 0 0; }
+details summary { cursor: pointer; color: var(--ink-2); font-size: .85rem; }
+footer.site { margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: .82rem; }
+ul { color: var(--ink-2); max-width: 68ch; }
+li { margin: .3rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site"><h1><a href="../" style="color:inherit">EdgeFit Atlas</a></h1>
+<p style="margin:0">Measured on-device inference.
+Every number reproducible; every failure recorded.</p></header>
+<nav class="site"><a href="../">The matrix</a><a href="../models/" class="here">Models</a><a href="../devices/">Devices</a><a href="../compare.html">Compare</a><a href="../methodology.html">Methodology</a><a href="../data/">Data</a><span class="spacer"></span>
+<button class="theme" type="button">theme</button></nav>
+<h2>all-MiniLM-L6-v2</h2><p class="mono dim">hf:sentence-transformers/all-MiniLM-L6-v2 · embed</p><div class="card"><strong>Graph fingerprint</strong><p>22.6M graph parameters (as exported) · 561 graph nodes · attention: mha · norm: layernorm</p><p class="dim">Constant&times;182, Add&times;63, Unsqueeze&times;61, MatMul&times;48, Reshape&times;27, Concat&times;26, Mul&times;26, Transpose&times;24</p><p class="dim">Graph size by weight dtype: fp32 339 nodes, fp16 340 nodes, int8 474 nodes, fp32 561 nodes. Quantization inserts quantize/dequantize pairs, so the node count grows even as the artifact shrinks.</p></div><h3>Latency by recipe</h3><figure><div class="legend"><span><i class="dot" style="background:var(--series-1)"></i>CPU</span><span><i class="dot" style="background:var(--series-2)"></i>accelerator</span></div><svg viewBox="0 0 702 374" width="702" height="374" role="img" aria-label="latency by recipe"><line x1="190.0" y1="32" x2="190.0" y2="352" stroke="var(--grid)" stroke-width="1"/><text x="190.0" y="362" font-size="10" fill="var(--muted)" text-anchor="middle">0</text><line x1="382.5" y1="32" x2="382.5" y2="352" stroke="var(--grid)" stroke-width="1"/><text x="382.5" y="362" font-size="10" fill="var(--muted)" text-anchor="middle">10</text><line x1="575.1" y1="32" x2="575.1" y2="352" stroke="var(--grid)" stroke-width="1"/><text x="575.1" y="362" font-size="10" fill="var(--muted)" text-anchor="middle">20</text><text x="400" y="22" font-size="10" fill="var(--muted)" text-anchor="middle">p50 latency, ms</text><rect x="190" y="40" width="86.1" height="20" rx="4" fill="var(--series-1)"/><rect x="190" y="40" width="4.0" height="20" fill="var(--series-1)"/><text x="182" y="54" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-cpu-int8-dyn</text><text x="283.1" y="54" font-size="11" fill="var(--ink)" font-weight="600">4.47</text><title>ort-cpu-int8-dyn: 4.47 — cv 0.3%, 22 MiB</title><rect x="190" y="72" width="86.5" height="20" rx="4" fill="var(--series-1)"/><rect x="190" y="72" width="4.0" height="20" fill="var(--series-1)"/><text x="182" y="86" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-cpu-int8-perchan</text><text x="283.5" y="86" font-size="11" fill="var(--ink)" font-weight="600">4.49</text><title>ort-cpu-int8-perchan: 4.49 — cv 0.2%, 22 MiB</title><rect x="190" y="104" width="185.3" height="20" rx="4" fill="var(--series-1)"/><rect x="190" y="104" width="4.0" height="20" fill="var(--series-1)"/><text x="182" y="118" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-cpu-fp32</text><text x="382.3" y="118" font-size="11" fill="var(--ink)" font-weight="600">9.62</text><title>ort-cpu-fp32: 9.62 — cv 0.2%, 86 MiB</title><rect x="190" y="136" width="190.6" height="20" rx="4" fill="var(--series-1)"/><rect x="190" y="136" width="4.0" height="20" fill="var(--series-1)"/><text x="182" y="150" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-cpu-4thread</text><text x="387.6" y="150" font-size="11" fill="var(--ink)" font-weight="600">9.90</text><title>ort-cpu-4thread: 9.90 — cv 5.8%, 86 MiB</title><rect x="190" y="168" width="199.9" height="20" rx="4" fill="var(--series-1)"/><rect x="190" y="168" width="4.0" height="20" fill="var(--series-1)"/><text x="182" y="182" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-cpu-dynamic</text><text x="396.9" y="182" font-size="11" fill="var(--ink)" font-weight="600">10.38</text><title>ort-cpu-dynamic: 10.38 — cv 0.2%, 86 MiB</title><rect x="190" y="200" width="219.5" height="20" rx="4" fill="var(--series-2)"/><rect x="190" y="200" width="4.0" height="20" fill="var(--series-2)"/><text x="182" y="214" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-coreml-fp16</text><text x="416.5" y="214" font-size="11" fill="var(--ink)" font-weight="600">11.40</text><title>ort-coreml-fp16: 11.40 — cv 0.1%, 43 MiB</title><rect x="190" y="232" width="225.9" height="20" rx="4" fill="var(--series-1)"/><rect x="190" y="232" width="4.0" height="20" fill="var(--series-1)"/><text x="182" y="246" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-cpu-fp16</text><text x="422.9" y="246" font-size="11" fill="var(--ink)" font-weight="600">11.73</text><title>ort-cpu-fp16: 11.73 — cv 3.0%, 43 MiB</title><rect x="190" y="264" width="387.2" height="20" rx="4" fill="var(--series-2)"/><rect x="190" y="264" width="4.0" height="20" fill="var(--series-2)"/><text x="182" y="278" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-coreml-fp32</text><text x="584.2" y="278" font-size="11" fill="var(--ink)" font-weight="600">20.11</text><title>ort-coreml-fp32: 20.11 — cv 0.6%, 86 MiB</title><rect x="190" y="296" width="403.1" height="20" rx="4" fill="var(--series-2)"/><rect x="190" y="296" width="4.0" height="20" fill="var(--series-2)"/><text x="182" y="310" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-coreml-ane</text><text x="600.1" y="310" font-size="11" fill="var(--ink)" font-weight="600">20.94</text><title>ort-coreml-ane: 20.94 — cv 0.3%, 86 MiB</title><rect x="190" y="328" width="420.0" height="20" rx="4" fill="var(--series-2)"/><rect x="190" y="328" width="4.0" height="20" fill="var(--series-2)"/><text x="182" y="342" font-size="11" fill="var(--ink-2)" text-anchor="end">ort-coreml-dynamic</text><text x="617.0" y="342" font-size="11" fill="var(--ink)" font-weight="600">21.81</text><title>ort-coreml-dynamic: 21.81 — cv 0.2%, 86 MiB</title><line x1="190" y1="32" x2="190" y2="352" stroke="var(--axis)" stroke-width="1"/></svg><figcaption>Median of 10 timed runs after 3 discarded warmups. Hover a bar for variance and artifact size.</figcaption></figure><h3>Speed against numerics</h3><figure><div class="legend"><span><i class="dot" style="background:var(--series-1)"></i>CPU</span><span><i class="dot" style="background:var(--series-2)"></i>accelerator</span></div><svg viewBox="0 0 640 320" width="640" height="320" role="img" aria-label="cosine vs fp32 reference against p50 latency, ms"><line x1="56" y1="220.4" x2="622" y2="220.4" stroke="var(--grid)" stroke-width="1"/><text x="48" y="223.9" font-size="10" fill="var(--muted)" text-anchor="end">0.98</text><line x1="56" y1="121.2" x2="622" y2="121.2" stroke="var(--grid)" stroke-width="1"/><text x="48" y="124.7" font-size="10" fill="var(--muted)" text-anchor="end">0.99</text><line x1="56" y1="22.0" x2="622" y2="22.0" stroke="var(--grid)" stroke-width="1"/><text x="48" y="25.5" font-size="10" fill="var(--muted)" text-anchor="end">1</text><text x="256.3" y="290" font-size="10" fill="var(--muted)" text-anchor="middle">10</text><text x="519.5" y="290" font-size="10" fill="var(--muted)" text-anchor="middle">20</text><line x1="56" y1="22" x2="56" y2="274" stroke="var(--axis)" stroke-width="1"/><line x1="56" y1="274" x2="622" y2="274" stroke="var(--axis)" stroke-width="1"/><text x="339" y="312" font-size="10" fill="var(--muted)" text-anchor="middle">p50 latency, ms · lower is better</text><text x="14" y="148" font-size="10" fill="var(--muted)" text-anchor="middle" transform="rotate(-90 14 148)">cosine vs fp32 reference</text><circle cx="110.8" cy="235.6" r="6.1" fill="var(--series-1)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-cpu-int8-dyn — cv 0.3%, 22 MiB</title></circle><circle cx="111.4" cy="97.6" r="6.1" fill="var(--series-1)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-cpu-int8-perchan — cv 0.2%, 22 MiB</title></circle><circle cx="246.4" cy="22.0" r="8.2" fill="var(--series-1)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-cpu-fp32 — cv 0.2%, 86 MiB</title></circle><circle cx="253.7" cy="22.0" r="8.2" fill="var(--series-1)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-cpu-4thread — cv 5.8%, 86 MiB</title></circle><circle cx="266.4" cy="22.0" r="8.2" fill="var(--series-1)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-cpu-dynamic — cv 0.2%, 86 MiB</title></circle><circle cx="293.2" cy="22.0" r="7.0" fill="var(--series-2)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-coreml-fp16 — cv 0.1%, 43 MiB</title></circle><circle cx="301.9" cy="22.0" r="7.0" fill="var(--series-1)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-cpu-fp16 — cv 3.0%, 43 MiB</title></circle><circle cx="522.4" cy="22.0" r="8.2" fill="var(--series-2)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-coreml-fp32 — cv 0.6%, 86 MiB</title></circle><circle cx="544.2" cy="22.0" r="8.2" fill="var(--series-2)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-coreml-ane — cv 0.3%, 86 MiB</title></circle><circle cx="567.2" cy="22.0" r="8.2" fill="var(--series-2)" fill-opacity="0.85" stroke="var(--surface-1)" stroke-width="2"><title>ort-coreml-dynamic — cv 0.2%, 86 MiB</title></circle></svg><figcaption>Marker area scales with artifact size. Cosine is a numerics check against the fp32 PyTorch reference, <em>not</em> task accuracy — a model can hold cosine 0.999 and still fail on the slice that matters.</figcaption></figure><h3>Every recipe measured</h3><div class="scroll"><table data-sortable><thead><tr><th class='sortable'>Recipe</th><th class='sortable'>Target</th><th class='sortable'>Outcome</th><th class='sortable num'>p50 ms</th><th class='sortable num'>cv</th><th class='sortable num'>size MiB</th><th class='sortable num'>cosine</th><th class='sortable num'>FLOP fb (auth)</th><th class='sortable num'>time fb (run)</th><th class='sortable num'>partitions</th></tr></thead><tbody><tr><td class='mono'>ort-cpu-int8-dyn</td><td>CPU</td><td><span class="badge ok">success</span></td><td class="num" data-v="4.4694994999999995">4.47</td><td class="num" data-v="0.2516165412484824">0.3%</td><td class="num" data-v="21.754246711730957">22</td><td class="num" data-v="0.9784670670144379">0.9785</td><td class="num" data-v="0.0">0.0%</td><td class="num" data-v="0.0">0.0%</td><td class="num dim">—</td></tr><tr><td class='mono'>ort-cpu-int8-perchan</td><td>CPU</td><td><span class="badge ok">success</span></td><td class="num" data-v="4.491562500000001">4.49</td><td class="num" data-v="0.20105718889568608">0.2%</td><td class="num" data-v="21.85329532623291">22</td><td class="num" data-v="0.9923734363110422">0.9924</td><td class="num" data-v="0.0">0.0%</td><td class="num" data-v="0.0">0.0%</td><td class="num dim">—</td></tr><tr><td class='mono'>ort-cpu-fp32</td><td>CPU</td><td><span class="badge ok">success</span></td><td class="num" data-v="9.624812">9.62</td><td class="num" data-v="0.24338346625335477">0.2%</td><td class="num" data-v="86.15383625030518">86</td><td class="num" data-v="0.9999999999994253">1.0000</td><td class="num" data-v="0.0">0.0%</td><td class="num" data-v="0.0">0.0%</td><td class="num dim">—</td></tr><tr><td class='mono'>ort-cpu-4thread</td><td>CPU</td><td><span class="badge ok">success</span></td><td class="num" data-v="9.898792">9.90</td><td class="num" data-v="5.782189736358938">5.8%</td><td class="num" data-v="86.15383625030518">86</td><td class="num" data-v="0.9999999999994253">1.0000</td><td class="num" data-v="0.0">0.0%</td><td class="num" data-v="0.0">0.0%</td><td class="num dim">—</td></tr><tr><td class='mono'>ort-cpu-dynamic</td><td>CPU</td><td><span class="badge ok">success</span></td><td class="num" data-v="10.3820835">10.38</td><td class="num" data-v="0.19475536176394487">0.2%</td><td class="num" data-v="86.18834590911865">86</td><td class="num" data-v="0.999999999999599">1.0000</td><td class="num dim">—</td><td class="num" data-v="0.0">0.0%</td><td class="num dim">—</td></tr><tr><td class='mono'>ort-coreml-fp16</td><td>CoreML</td><td><span class="badge ok">success</span></td><td class="num" data-v="11.4021045">11.40</td><td class="num" data-v="0.10952656326142554">0.1%</td><td class="num" data-v="43.139803886413574">43</td><td class="num" data-v="0.999999464305703">1.0000</td><td class="num" data-v="99.7967">99.8%</td><td class="num" data-v="100.0">100.0%</td><td class="num dim">—</td></tr><tr><td class='mono'>ort-cpu-fp16</td><td>CPU</td><td><span class="badge ok">success</span></td><td class="num" data-v="11.733791499999999">11.73</td><td class="num" data-v="3.0299127569156705">3.0%</td><td class="num" data-v="43.139803886413574">43</td><td class="num" data-v="0.999999464305703">1.0000</td><td class="num" data-v="0.0">0.0%</td><td class="num" data-v="0.0">0.0%</td><td class="num dim">—</td></tr><tr><td class='mono'>ort-coreml-fp32</td><td>CoreML</td><td><span class="badge ok">success</span></td><td class="num" data-v="20.111020500000002">20.11</td><td class="num" data-v="0.6201424516108606">0.6%</td><td class="num" data-v="86.15383625030518">86</td><td class="num" data-v="0.9999992040075125">1.0000</td><td class="num" data-v="99.4579">99.5%</td><td class="num" data-v="29.5421">29.5%</td><td class="num" data-v="31.0">31</td></tr><tr><td class='mono'>ort-coreml-ane</td><td>CoreML</td><td><span class="badge ok">success</span></td><td class="num" data-v="20.9387915">20.94</td><td class="num" data-v="0.30242911765535857">0.3%</td><td class="num" data-v="86.15383625030518">86</td><td class="num" data-v="0.9999992040075125">1.0000</td><td class="num" data-v="99.4579">99.5%</td><td class="num" data-v="30.0434">30.0%</td><td class="num" data-v="31.0">31</td></tr><tr><td class='mono'>ort-coreml-dynamic</td><td>CoreML</td><td><span class="badge ok">success</span></td><td class="num" data-v="21.814125">21.81</td><td class="num" data-v="0.24155478886865142">0.2%</td><td class="num" data-v="86.18834590911865">86</td><td class="num" data-v="0.999999999999612">1.0000</td><td class="num dim">—</td><td class="num" data-v="10.4221">10.4%</td><td class="num" data-v="44.0">44</td></tr><tr><td class='mono'>ort-coreml-mlprogram</td><td>CoreML</td><td><span class="badge fail">lowering failure</span></td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td></tr></tbody></table></div><h3>Recorded failures</h3><p>Kept rather than hidden. A recipe that cannot lower is a fact about the toolchain, and it is what teaches the static filter not to propose it again.</p><div class="card"><strong class="mono">ort-coreml-mlprogram</strong> <span class="badge fail">lowering failure</span><pre class="repro">the runtime aborted the process (SIGABRT). This is a delegate-level crash, not a Python exception. Last output: l&quot;(%arg1, %0) &lt;{transpose_lhs = false, transpose_rhs = false}&gt; : (tensor&lt;1x128x1xf32&gt;, tensor&lt;384x384xf32&gt;) -&gt; tensor&lt;1x128x384xf32&gt;
+/AppleInternal/Library/BuildRoots/b11baf73-9ee0-11ef-b7b4-7aebe1f78c73/Library/Caches/com.apple.xbs/Sources/MetalPerformanceShadersGraph/mpsgraph/MetalPerformanceShadersGraph/Core/Files/MPSGraphExecutable.mm:975: failed assertion `original module failed verification&#x27;</pre></div><h3>Reproduce</h3><details><summary>Commands for every row on this page</summary><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_int8_dynamic.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_int8_perchannel.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_fp32.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_4thread.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_dynamic.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_fp16.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_cpu_fp16.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_fp32.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_ane.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_dynamic.yaml</pre><pre class="repro">uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 --recipe recipes/ort_coreml_mlprogram.yaml</pre></details>
+<footer class="site">
+edgefit 0.0.1 · harness 0.3.5 ·
+generated 2026-08-05 23:11 EDT<br>
+Corpus is append-only and immutable: a re-measurement is a new row, never an edit.
+</footer>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var saved = null;
+  try { saved = localStorage.getItem('edgefit-theme'); } catch (e) {}
+  if (saved) root.setAttribute('data-theme', saved);
+  var btn = document.querySelector('button.theme');
+  if (btn) btn.addEventListener('click', function () {
+    var dark = getComputedStyle(root).colorScheme === 'dark';
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('edgefit-theme', next); } catch (e) {}
+  });
+
+  // Table sort. Numeric columns are marked with class="num"; everything else
+  // sorts as text. A missing value always sorts last regardless of direction —
+  // "we did not measure this" is not a small number.
+  document.querySelectorAll('table[data-sortable]').forEach(function (table) {
+    var body = table.tBodies[0];
+    table.querySelectorAll('th.sortable').forEach(function (th, index) {
+      th.addEventListener('click', function () {
+        var desc = th.getAttribute('aria-sort') !== 'descending';
+        table.querySelectorAll('th').forEach(function (o) { o.removeAttribute('aria-sort'); });
+        th.setAttribute('aria-sort', desc ? 'descending' : 'ascending');
+        var numeric = th.classList.contains('num');
+        var rows = Array.prototype.slice.call(body.rows);
+        rows.sort(function (a, b) {
+          var x = a.cells[index], y = b.cells[index];
+          var av = x ? (x.dataset.v !== undefined ? x.dataset.v : x.textContent.trim()) : '';
+          var bv = y ? (y.dataset.v !== undefined ? y.dataset.v : y.textContent.trim()) : '';
+          var an = av === '' || av === '—', bn = bv === '' || bv === '—';
+          if (an && bn) return 0;
+          if (an) return 1;
+          if (bn) return -1;
+          var r = numeric ? parseFloat(av) - parseFloat(bv) : av.localeCompare(bv);
+          return desc ? -r : r;
+        });
+        rows.forEach(function (r) { body.appendChild(r); });
+      });
+    });
+  });
+
+  // Filters. Each control names the table it drives via data-target.
+  function applyFilters(table) {
+    var text = (document.querySelector('[data-filter-text][data-target="' + table.id + '"]') || {}).value || '';
+    var needle = text.toLowerCase();
+    var selects = document.querySelectorAll('[data-filter-key][data-target="' + table.id + '"]');
+    var shown = 0;
+    Array.prototype.forEach.call(table.tBodies[0].rows, function (row) {
+      var ok = !needle || row.textContent.toLowerCase().indexOf(needle) !== -1;
+      Array.prototype.forEach.call(selects, function (sel) {
+        if (ok && sel.value) ok = row.dataset[sel.dataset.filterKey] === sel.value;
+      });
+      row.hidden = !ok;
+      if (ok) shown++;
+    });
+    var out = document.querySelector('[data-count][data-target="' + table.id + '"]');
+    if (out) out.textContent = shown + ' of ' + table.tBodies[0].rows.length + ' rows';
+  }
+  document.querySelectorAll('[data-target]').forEach(function (control) {
+    if (!control.dataset.filterText && !control.dataset.filterKey) return;
+    var table = document.getElementById(control.dataset.target);
+    if (!table) return;
+    var run = function () { applyFilters(table); };
+    control.addEventListener('input', run);
+    control.addEventListener('change', run);
+  });
+  document.querySelectorAll('table[data-sortable]').forEach(applyFilters);
+})();
+</script>
+</body>
+</html>
