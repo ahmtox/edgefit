@@ -1,64 +1,98 @@
 # EdgeFit
 
-A deployment compiler for on-device AI. Give it a model, target devices, and
-constraints; it searches the space of deployment configurations, measures the
-promising ones on real hardware, and returns the optimal configuration plus the
-compiled artifact plus a proof that it hits the budget.
+Neutral, reproducible measurement of on-device AI inference — across silicon vendors,
+including the failures.
 
-**Status: pre-product.** What exists today is pass 1 — the measurement harness.
-Everything downstream depends on the numbers being trustworthy, so that came
-first. See [docs/PROJECT.md](docs/PROJECT.md) for the product, and
+Longer term this is a deployment compiler: give it a model, target devices and
+constraints; it searches deployment recipes, measures the promising ones on real
+hardware, and returns the best one plus the artifact plus a proof it meets budget. That
+comes later and deliberately so. **Measurement first, because everything downstream is
+worthless if the numbers are wrong.**
+
+See [docs/PROJECT.md](docs/PROJECT.md) for the product and
 [docs/STATUS.md](docs/STATUS.md) for what is actually built.
 
 ---
 
-## What works today
+## The finding
 
-`(model, recipe, device) → measurement`, on ONNX Runtime with CPU and CoreML
-execution providers, with the result written immutably to a local corpus.
+**[Your accelerator probably isn't running your model](docs/silent-fallback.md)**
+
+One vision model, exported once to fp32 ONNX, profiled on eleven mobile SoCs from
+Qualcomm, Google and Samsung. Three ran it on the NPU. **Eight ran every node on the
+CPU** — no error, no warning, correct results. Fastest 6.26 ms, slowest 820.37 ms:
+**131× on the same file.**
+
+Two 2024 flagships: Galaxy S24 at **7.68 ms**, Pixel 9 at **303.76 ms**. 39.5× apart.
+
+And the mirror image on Apple: ONNX Runtime's CoreML provider makes **four of six
+models slower** than plain CPU, also silently.
+
+## What works today
 
 ```bash
 uv sync --extra export --group dev
 
-uv run edgefit doctor        # is this host fit to measure on?
-uv run edgefit models        # what subjects are registered
+uv run edgefit doctor                  # is this host fit to measure on?
+uv run edgefit probe --model hf:...    # how would this model be measured?
 uv run edgefit measure --model hf:sentence-transformers/all-MiniLM-L6-v2 \
                        --recipe recipes/ort_coreml_fp32.yaml
-uv run edgefit corpus list
-uv run edgefit corpus export # Parquet + CSV
-uv run edgefit verify        # golden fixtures — the gate for everything after
+uv run edgefit sweep                   # models × recipes, locally
+uv run edgefit sweep-remote            # models × hosted phones
+uv run edgefit atlas build             # the corpus as a static site
+uv run edgefit corpus export           # Parquet + CSV
+uv run edgefit verify                  # golden fixtures — the gate for everything after
 ```
 
-## The first finding
+Corpus today: **110 measurements** over 7 models and 16 devices — 12 SoCs from Apple,
+Qualcomm, Google and Samsung — of which **22 rows are recorded failures**.
 
-On Apple M2 with ONNX Runtime 1.28, the CoreML execution provider claims roughly
-half the *nodes* of `all-MiniLM-L6-v2` and leaves **99.5% of the arithmetic** on
-CPU — every MatMul, every LayerNormalization, fragmented across 37 partitions.
-Nothing errors, nothing warns, and enabling CoreML makes the model 2.3× slower.
-
-That is the failure mode EdgeFit exists to find, and it is why fallback is
-recorded three independent ways (node share, FLOP share, measured time share).
-A team reading only node share would conclude the delegate was working.
+| | |
+|---|---|
+| **Backends** | ONNX Runtime — CPU and CoreML providers, locally; Qualcomm AI Hub for hosted phones |
+| **Models** | Any HuggingFace repo id. Specs are inferred from `config.json`; the registry holds overrides for what inference cannot get right |
+| **Recipes** | fp32 · fp16 · int8 dynamic (per-tensor and per-channel) · static vs dynamic shapes · provider and vendor flags |
+| **Workloads** | Encoders, classifiers, vision, and decoder-only generation with KV-cache I/O (TTFT and decode reported separately, never averaged) |
+| **Analysis** | Per-node accelerator placement three ways · static FLOP estimation · graph fingerprint · duplicate-weight detection |
+| **Output** | Insert-only DuckDB corpus, Parquet/CSV export, and a static atlas with a reproduction command on every row |
 
 ## Why the harness refuses to run
 
-Measurement trust is the asset. If one hallucinated number enters the corpus,
-every model trained on it is compromised, so the harness is built to fail loudly
-rather than produce a plausible wrong answer:
+Measurement trust is the whole asset. One hallucinated number compromises every model
+trained on the corpus, so this is built to fail loudly rather than produce a plausible
+wrong answer:
 
-- **A preflight gate** checks AC power, low-power mode, thermal state, load
-  average and free memory, and refuses if any fails. On a laptop with a browser
-  open, it refuses — correctly.
-- **A measured throttle probe** times a fixed kernel against the host's own
-  recorded best, because Apple Silicon exposes no unprivileged temperature and
+- **A preflight gate** checks AC power, low-power mode, thermal state and free memory,
+  and refuses if any fails. On a laptop with a browser open it refuses — correctly.
+- **A measured throttle probe** times a fixed kernel against the host's own recorded
+  healthy throughput, because Apple Silicon exposes no unprivileged temperature and
   inventing one is worse than admitting it.
-- **Variance is mandatory.** `RunStats` can only be built from raw samples and
-  revalidates its own aggregates, so a fabricated standard deviation cannot be
-  represented.
-- **The corpus is insert-only.** No update, no delete, anywhere.
+- **Variance is mandatory and structural.** `RunStats` is constructible only from raw
+  samples and revalidates its own aggregates, so a fabricated standard deviation cannot
+  be represented.
+- **The corpus is insert-only.** No update, no delete, anywhere. A re-measurement is a
+  new row carrying a new harness version.
 - **Unavailable values are null plus a written reason**, never a placeholder.
-- **Both cascade tiers run out of process**, so a delegate that aborts the
-  interpreter becomes a recorded failure instead of a dead sweep.
+- **Both cascade tiers run out of process**, so a delegate that aborts the interpreter
+  becomes a recorded failure instead of a dead sweep.
+- **Third-party rows never impersonate ours.** Hosted measurements are marked
+  throughout, with their thermal state recorded as unknown rather than assumed clean.
+- **A model we cannot place is refused, not approximated.** The wrong input harness does
+  not error — it returns a plausible number for a workload nobody asked about.
+
+## What is not true yet
+
+Stated here rather than buried, because the gaps are the reason to trust the rest:
+
+- **No two-unit test.** Four physical devices of one SoC agree to 0.87%, which is the
+  closest substitute, but they are different products — a disagreement could have been
+  real rather than methodological.
+- **Apple numbers are dev-grade.** One laptop-class machine, no second unit.
+- **No quantized path on hosted devices.** AI Hub compile jobs are rejected server-side,
+  so hosted rows are fp32 only — and "does int8 recover those eight devices?" is
+  therefore the one question our headline finding raises that we cannot answer.
+- **No power instrumentation, no thermal soak, no accuracy tier.** All null with
+  recorded reasons rather than estimated.
 
 ## Layout
 
@@ -66,15 +100,27 @@ rather than produce a plausible wrong answer:
 src/edgefit/
   schema/     recipe, measurement, fingerprint, host records
   corpus/     insert-only DuckDB store + Parquet export
-  harness/    host probes, preflight gate, run protocol, subprocess workers
-  backends/   ONNX Runtime; graph/FLOP/EP-placement analysis
-  models/     registered model subjects
+  harness/    host probes, preflight gate, run protocol, hosted measurement
+  backends/   ONNX Runtime, export, quantization, graph/FLOP/placement analysis
+  models/     spec inference + registry overrides
+  atlas/      static site generator
+  devices/    device inventory and fleet resolution
   cli/        typer entry point
-tests/
-  golden/     known-answer fixtures (marked `device`)
+tests/golden/ known-answer fixtures (marked `device`)
 ```
 
 ```bash
-uv run pytest -m "not device"   # fast suite, no hardware
+uv run pytest        # fast suite, no hardware
 uv run ruff check .
 ```
+
+## Hard rules
+
+Enforced mechanically where possible, not by discipline:
+
+1. Never estimate, extrapolate or synthesize a measurement value. A failed run is
+   recorded as a failure; an unavailable field is null plus a reason.
+2. Every measurement needs n≥5 runs and reported variance, or the record is invalid.
+3. Measurements are immutable. Never `UPDATE`.
+4. Measure end-to-end, including framework overhead and lowering time.
+5. Open-source the harness. Every published number independently reproducible.
