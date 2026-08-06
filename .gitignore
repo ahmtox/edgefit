@@ -17,6 +17,12 @@ __pycache__/
 /.edgefit/
 # Generated atlas. `edgefit atlas build` reproduces it from the corpus.
 /site/
+# NOT ignored, on purpose:
+#   /data/     — the published corpus snapshot. Hard rule #5 says every published
+#                number must be independently checkable, and a clean clone has no
+#                corpus, so the snapshot has to be in the repo.
+#   .edgefit/qai_hub_devices.json — the hosted device catalogue, cached rather than
+#                fetched so the inventory works offline and is diffable in review.
 # Archived dev corpora from schema/exporter migrations.
 /corpus.*/
 

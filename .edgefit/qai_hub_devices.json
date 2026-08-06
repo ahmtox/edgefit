@@ -1,0 +1,1321 @@
+{
+ "fetched_from": "qai_hub",
+ "devices": [
+  {
+   "name": "Google Pixel 3 (Family)",
+   "os": "10",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-845",
+    "chipset:sdm845",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v65",
+    "os:android",
+    "soc-model:1",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 3",
+   "os": "10",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-845",
+    "chipset:sdm845",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v65",
+    "os:android",
+    "soc-model:1",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 3a",
+   "os": "10",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-670",
+    "chipset:sdm670",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v65",
+    "os:android",
+    "soc-model:6",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 3 XL",
+   "os": "10",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-845",
+    "chipset:sdm845",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v65",
+    "os:android",
+    "soc-model:1",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 4",
+   "os": "10",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-855",
+    "chipset:sm8150",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:12",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 4",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-855",
+    "chipset:sm8150",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:12",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 5",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-765g",
+    "chipset:sm7250",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:25",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy Tab S7",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-865+",
+    "chipset:sm8250-ab",
+    "format:tablet",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:21",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy Note 20 (Intl)",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:samsung-exynos-990",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S21 (Family)",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-888",
+    "chipset:sm8350",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "os:android",
+    "soc-model:30",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S21",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-888",
+    "chipset:sm8350",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "os:android",
+    "soc-model:30",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S21 Ultra",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-888",
+    "chipset:sm8350",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "os:android",
+    "soc-model:30",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Xiaomi Redmi Note 10 5G",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-678",
+    "chipset:sm6150-ac",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:16",
+    "vendor:oneplus"
+   ]
+  },
+  {
+   "name": "Google Pixel 3a XL",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-670",
+    "chipset:sdm670",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v65",
+    "os:android",
+    "soc-model:6",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 5 (Family)",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-765g",
+    "chipset:sm7250",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:25",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 5",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-765g",
+    "chipset:sm7250",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:25",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 5a 5G",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-765g",
+    "chipset:sm7250",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "hexagon:v66",
+    "os:android",
+    "soc-model:25",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 6",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy A53 5G",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:samsung-exynos-1280",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy A73 5G",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-778g",
+    "chipset:sm7325",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:35",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "QCS8550 (Proxy)",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-dragonwing-qcs8550-proxy",
+    "chipset:qualcomm-qcs8550-proxy",
+    "format:iot",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:43",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S21 (Family)",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-888",
+    "chipset:sm8350",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "os:android",
+    "soc-model:30",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S21",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-888",
+    "chipset:sm8350",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "os:android",
+    "soc-model:30",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S21 Ultra",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-888",
+    "chipset:sm8350",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "os:android",
+    "soc-model:30",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S22 (Family)",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S22 Ultra 5G",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S22 5G",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S22+ 5G",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy Tab S8",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:tablet",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Xiaomi 12 (Family)",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:xiaomi"
+   ]
+  },
+  {
+   "name": "Xiaomi 12",
+   "os": "12",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:xiaomi"
+   ]
+  },
+  {
+   "name": "Google Pixel 6 (Family)",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 6",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 7 (Family)",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g2",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 7",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g2",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 7 Pro",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g2",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy A14 5G",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:samsung-exynos-1330",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S22 5G",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen1",
+    "chipset:sm8450",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v69",
+    "htp-supports-fp16:true",
+    "os:android",
+    "soc-model:36",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S23 (Family)",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen2",
+    "chipset:sm8550",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:43",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S23",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen2",
+    "chipset:sm8550",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:43",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S23+",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen2",
+    "chipset:sm8550",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:43",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S23 Ultra",
+   "os": "13",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen2",
+    "chipset:sm8550",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:43",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Google Pixel 7",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g2",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 8 (Family)",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g3",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 8",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g3",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 8 Pro",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g3",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S24 (Family)",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen3",
+    "chipset:sm8650",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v75",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:57",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S24",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen3",
+    "chipset:sm8650",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v75",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:57",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S24 Ultra",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen3",
+    "chipset:sm8650",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v75",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:57",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S24+",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8gen3",
+    "chipset:sm8650",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v75",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:57",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Google Pixel 9 (Family)",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g4",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 9",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g4",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 9 Pro",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g4",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 9 Pro XL",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g4",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S25",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-for-galaxy",
+    "chipset:sm8750-ac",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v79",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:69",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S25 Ultra",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-for-galaxy",
+    "chipset:sm8750-ac",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v79",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:69",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S25+",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-for-galaxy",
+    "chipset:sm8750-ac",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v79",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:69",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S25 (Family)",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-for-galaxy",
+    "chipset:sm8750-ac",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v79",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:69",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Google Pixel 9 Pro",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g4",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 10",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g5",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Google Pixel 10 Pro XL",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:google-tensor-g5",
+    "format:phone",
+    "framework:onnx",
+    "framework:tflite",
+    "os:android",
+    "vendor:google"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S26",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-gen5-for-galaxy",
+    "chipset:sm8850-ad",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v81",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:87",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S26 Ultra",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-gen5-for-galaxy",
+    "chipset:sm8850-ad",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v81",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:87",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S26+",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-gen5-for-galaxy",
+    "chipset:sm8850-ad",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v81",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:87",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Samsung Galaxy S26 (Family)",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-gen5-for-galaxy",
+    "chipset:sm8850-ad",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v81",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:87",
+    "vendor:samsung"
+   ]
+  },
+  {
+   "name": "Snapdragon X Elite CRD",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-windows",
+    "chipset:qualcomm-snapdragon-x-elite",
+    "chipset:sc8380xp",
+    "format:compute",
+    "framework:onnx",
+    "framework:qnn",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:windows",
+    "soc-model:60",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Snapdragon X Plus 8-Core CRD",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-windows",
+    "chipset:qualcomm-snapdragon-x-plus-8-core",
+    "chipset:sc8340xp",
+    "format:compute",
+    "framework:onnx",
+    "framework:qnn",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:windows",
+    "soc-model:60",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Snapdragon X2 Elite CRD",
+   "os": "11",
+   "attributes": [
+    "abi:aarch64-windows",
+    "chipset:qualcomm-snapdragon-x2-elite",
+    "chipset:sc8480xp",
+    "format:compute",
+    "framework:onnx",
+    "framework:qnn",
+    "hexagon:v81",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:windows",
+    "soc-model:88",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Snapdragon 8 Elite QRD",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite",
+    "chipset:sm8750",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v79",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:69",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Snapdragon 8 Elite Gen 5 QRD",
+   "os": "16",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-8-elite-gen5",
+    "chipset:sm8850",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v81",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:87",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Snapdragon 7 Gen 4 QRD",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-snapdragon-7gen4",
+    "chipset:sm7750",
+    "format:phone",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:86",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "SA8295P ADP",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-sa8295p",
+    "format:auto",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:39",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "SA8775P ADP",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-sa8775p",
+    "format:auto",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:52",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "SA7255P ADP",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qualcomm-sa7255p",
+    "format:auto",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v75",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:67",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Dragonwing Q-6690 MTP",
+   "os": "15",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qcm6690",
+    "chipset:qualcomm-dragonwing-q-6690",
+    "chipset:qualcomm-qcm6690",
+    "format:iot",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:78",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "QCS8275 (Proxy)",
+   "os": "14",
+   "attributes": [
+    "abi:aarch64-android",
+    "chipset:qcs8275",
+    "chipset:qualcomm-dragonwing-iq-8275-proxy",
+    "chipset:qualcomm-qcs8275-proxy",
+    "format:iot",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v75",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:android",
+    "soc-model:67",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Dragonwing RB3 Gen 2 Vision Kit",
+   "os": "1.6",
+   "attributes": [
+    "abi:aarch64-oe-linux-gcc11",
+    "chipset:qcs6490",
+    "chipset:qualcomm-dragonwing-qcs6490",
+    "chipset:qualcomm-qcs6490",
+    "format:iot",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v68",
+    "os:qc_linux",
+    "soc-model:93",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Dragonwing IQ-9075 EVK",
+   "os": "1.9",
+   "attributes": [
+    "abi:aarch64-oe-linux-gcc11",
+    "chipset:qcs9075",
+    "chipset:qualcomm-dragonwing-iq-9075",
+    "chipset:qualcomm-qcs9075",
+    "format:iot",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v73",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:qc_linux",
+    "soc-model:77",
+    "vendor:qualcomm"
+   ]
+  },
+  {
+   "name": "Arduino VENTUNO Q",
+   "os": "24.04",
+   "attributes": [
+    "abi:aarch64-oe-linux-gcc11",
+    "chipset:qcs8275",
+    "chipset:qualcomm-dragonwing-iq-8275",
+    "chipset:qualcomm-qcs8275",
+    "format:iot",
+    "framework:onnx",
+    "framework:qnn",
+    "framework:tflite",
+    "hexagon:v75",
+    "htp-supports-fp16:true",
+    "htp-supports-weight-sharing:true",
+    "os:ubuntu",
+    "soc-model:82",
+    "vendor:qualcomm"
+   ]
+  }
+ ]
+}
