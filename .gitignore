@@ -28,3 +28,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Internal planning and strategy. Not published.
+/internal/

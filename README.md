@@ -9,8 +9,9 @@ hardware, and returns the best one plus the artifact plus a proof it meets budge
 comes later and deliberately so. **Measurement first, because everything downstream is
 worthless if the numbers are wrong.**
 
-See [docs/PROJECT.md](docs/PROJECT.md) for the product and
-[docs/STATUS.md](docs/STATUS.md) for what is actually built.
+What is built, what is not, and what we know to be shaky is in
+[the finding](docs/silent-fallback.md) and in *What is not true yet* below.
+Product strategy and roadmap are not published.
 
 ---
 

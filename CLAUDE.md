@@ -1,5 +1,5 @@
-Project context: @docs/PROJECT.md   ← read this when you need product context
-Current state:   @docs/STATUS.md    ← features, TODO, known gaps, decisions log
+Project context: @internal/PROJECT.md   ← read this when you need product context
+Current state:   @internal/STATUS.md    ← features, TODO, known gaps, decisions log
 
 ## Hard rules (PROJECT.md §14) — enforce mechanically, never by discipline
 
@@ -16,4 +16,4 @@ Current state:   @docs/STATUS.md    ← features, TODO, known gaps, decisions lo
 - Runtime deps stay thin and torch-free; anything needed only to *produce* an
   artifact goes in the `export` extra (keeps the Tier-3 self-hosted runner shippable).
 - Tests that touch real hardware are marked `device` and excluded from the fast suite.
-- Update `docs/STATUS.md` as part of the change, not afterwards.
+- Update `internal/STATUS.md` as part of the change, not afterwards.
