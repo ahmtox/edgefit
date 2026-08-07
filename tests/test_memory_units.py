@@ -10,8 +10,6 @@ import subprocess
 import sys
 import textwrap
 
-import pytest
-
 from edgefit.harness.memory import maxrss_scale, peak_rss_bytes
 
 _ALLOCATION_MIB = 200
