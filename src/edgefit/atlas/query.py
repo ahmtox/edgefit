@@ -290,9 +290,23 @@ def _short_provider(provider: str | None) -> str:
     return (provider or "unknown").replace("ExecutionProvider", "") or "unknown"
 
 
-def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) -> list[Row]:
-    """Every measurement, successes and failures alike."""
+def load_rows(
+    store: CorpusStore,
+    recipe_paths: dict[str, str] | None = None,
+    *,
+    current_only: bool = True,
+) -> list[Row]:
+    """Every measurement, successes and failures alike.
+
+    ``current_only`` drops rows a later harness version has re-measured on the same
+    cell. The corpus keeps them — they are immutable records of what an instrument
+    reported — but publishing four generations side by side would mean averaging
+    figures we have since corrected, which is worse than showing fewer rows.
+    """
+    from edgefit.corpus.store import superseded_ids  # noqa: PLC0415
+
     paths = recipe_paths or {}
+    skip = superseded_ids(store) if current_only else set()
     rows: list[Row] = []
     for record in store.query(_ROW_SQL).fetchall():
         (
@@ -305,6 +319,8 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
             thermal, power, calib, harness, created, stress,
             source, source_detail,
         ) = record
+        if mid in skip:
+            continue
         name = model_ref.removeprefix("hf:").split("/")[-1]
         rows.append(
             Row(

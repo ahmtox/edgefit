@@ -432,3 +432,46 @@ def migrate(source: Path | str, destination: Path | str) -> dict[str, int]:
     finally:
         old.close()
     return counts
+
+
+def parse_harness_version(value: str) -> tuple[int, ...]:
+    """Version as a comparable tuple.
+
+    String comparison is wrong and quietly so: ``"0.3.10" < "0.3.9"`` is True, which
+    would mark the newest generation of rows as the superseded one and publish the
+    figures we had just corrected.
+    """
+    parts: list[int] = []
+    for chunk in value.split("."):
+        digits = "".join(c for c in chunk if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def superseded_ids(store: CorpusStore) -> set[str]:
+    """Measurements a later harness version has re-measured on the same cell.
+
+    Nothing is deleted — hard rule #3 — and nothing needs to be. A cell measured
+    again under a newer harness produces a new row, and the old one stays as an
+    immutable record of what that instrument reported. This just says which rows are
+    no longer the current answer, so the atlas and the published snapshot can show one
+    generation instead of silently averaging four.
+
+    Supersession is keyed on harness version, never on time. Repeats *within* a
+    version are the repeatability evidence the atlas deliberately shows, so they must
+    not supersede each other.
+    """
+    rows = store.query(
+        "SELECT measurement_id, recipe_id, device_id, harness_version FROM measurements"
+    ).fetchall()
+    newest: dict[tuple[str, str], tuple[int, ...]] = {}
+    for _, recipe_id, device_id, version in rows:
+        cell = (recipe_id, device_id)
+        parsed = parse_harness_version(version)
+        if parsed > newest.get(cell, ()):
+            newest[cell] = parsed
+    return {
+        mid
+        for mid, recipe_id, device_id, version in rows
+        if parse_harness_version(version) < newest[(recipe_id, device_id)]
+    }
