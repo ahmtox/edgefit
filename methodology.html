@@ -144,12 +144,12 @@ Every number reproducible; every failure recorded.</p></header>
 <nav class="site"><a href="">The matrix</a><a href="models/">Models</a><a href="devices/">Devices</a><a href="compare.html">Compare</a><a href="methodology.html" class="here">Methodology</a><a href="data/">Data</a><span class="spacer"></span>
 <button class="theme" type="button">theme</button></nav>
 
-<div class="banner"><strong>Read this before citing anything here.</strong><p>These 135 measurements do not all come from the same place, and the conditions behind them differ.</p><p>80 of them were measured by us on <em>one</em> laptop-class
+<div class="banner"><strong>Read this before citing anything here.</strong><p>These 186 measurements do not all come from the same place, and the conditions behind them differ.</p><p>125 of them were measured by us on <em>one</em> laptop-class
 machine, gated for AC power, low-power mode off, nominal thermal state and verified
 available compute — but there is no second unit of the same SKU to cross-check
 against, so the <a href="methodology.html#two-unit">two-unit test</a> has not been
 run. Treat those as dev-grade figures that are honest about their own conditions, not
-as lab results. Laptop thermals also differ from a rack-mounted machine.</p><p>55 rows were measured on <strong>Qualcomm AI Hub</strong>'s hosted
+as lab results. Laptop thermals also differ from a rack-mounted machine.</p><p>61 rows were measured on <strong>Qualcomm AI Hub</strong>'s hosted
 phones, marked <span class="thirdparty">3P</span> throughout. Our own gating does not
 apply to them: their thermal state is not exposed, the run count is theirs, and their
 timing excludes model load and host-side framework overhead, so those rows read faster
@@ -168,7 +168,7 @@ samples fails validation and cannot be written. The aggregate statistics are
 recomputed from the raw samples on load and rejected if they disagree, so a variance
 figure that did not come from measured data is not representable.</p>
 <p>In this corpus: 10 timed runs per measurement, 3 discarded warmups, median
-coefficient of variation <strong>1.5%</strong>, worst
+coefficient of variation <strong>0.8%</strong>, worst
 <strong>18.5%</strong>. Warmups are discarded because the first inference
 includes lazy kernel compilation and delegate model caching — a real cost, but a
 different one from steady-state latency.</p>
@@ -208,6 +208,26 @@ the embedding it indexes, and the job fails with an error that looks like the de
 refusing the model. It is not. We now refuse to submit such models rather than record
 a failure against hardware that did nothing wrong, which is why the text models
 measured on our own devices have no Snapdragon rows here.</p>
+
+<h3 id="firstrun">The first run is not warmup</h3>
+<p>Steady-state latency is measured after discarded warmup runs, because the first call
+includes lazy kernel compilation and delegate caching — a real cost, but a different one
+from the per-inference cost that dominates a busy app.</p>
+<p>That reasoning is standard and it quietly hides something large. A user opening an app
+cold pays the model load <em>and</em> the first inference, and on a phone the load can be
+three orders of magnitude bigger than the inference it enables. So both are recorded:
+<span class="mono">cold_load_ms</span> (session creation, delegate initialisation,
+ahead-of-time compilation), <span class="mono">warm_load_ms</span> (the same with caches
+populated) and <span class="mono">first_inference_ms</span> (the first run, timed rather
+than binned).</p>
+<p>The reason this is a column and not a footnote: <strong>it is not a constant
+offset</strong>. On one device, the CPU-only path loaded an order of magnitude faster
+than the path that reached the NPU — so an accelerator's speedup is partly financed by
+startup cost, and subtracting a fixed number would misrepresent both.</p>
+<p>Hosted rows carry load times but not
+<span class="mono">first_inference_ms</span>: the service reports load and steady state,
+not the duration of the first run specifically, so it is null with that reason rather
+than derived.</p>
 
 <h3 id="gate">The gate: we refuse rather than annotate</h3>
 <p>Before every measurement the host is checked, and if it fails the measurement does
@@ -334,7 +354,7 @@ numbers. There is a regression test that allocates a known amount and checks the
 result lands near it.</p>
 
 <h3 id="failures">Failures are published</h3>
-<p>22 of 135 rows in this corpus are failures, and
+<p>19 of 186 rows in this corpus are failures, and
 they are in the data download along with everything else. A recipe that will not lower,
 or a delegate that aborts the process outright, is a fact about the toolchain that is
 expensive to rediscover.</p>
@@ -383,8 +403,8 @@ accelerator's losses using the FLOP-fallback figure. That explanation was wrong,
 the section above says so.</p>
 
 <footer class="site">
-edgefit 0.0.1 · harness 0.3.6 ·
-generated 2026-08-07 00:43 EDT<br>
+edgefit 0.1.1 · harness 0.3.10 ·
+generated 2026-08-07 09:33 EDT<br>
 Corpus is append-only and immutable: a re-measurement is a new row, never an edit.
 </footer>
 </div>
