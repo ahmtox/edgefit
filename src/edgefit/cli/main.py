@@ -799,12 +799,42 @@ app.add_typer(atlas_app, name="atlas")
 def atlas_build(
     out: Annotated[Path, typer.Option(help="Output directory.")] = Path("site"),
     corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
+    from_export: Annotated[
+        Path | None,
+        typer.Option(help="Build from a published Parquet snapshot instead, e.g. ./data."),
+    ] = None,
 ) -> None:
-    """Render the atlas from the corpus into a directory of static files."""
+    """Render the atlas from the corpus into a directory of static files.
+
+    A clean clone has no corpus — it is dev state — so `--from-export data` builds the
+    published snapshot instead. Without that, following the README on a fresh clone
+    produced an atlas reporting zero measurements.
+    """
     from edgefit.atlas import build as build_atlas  # noqa: PLC0415
 
-    with CorpusStore(corpus) as store, console.status("rendering…"):
+    published = Path("data")
+    fall_back = (
+        from_export is None
+        and not corpus.exists()
+        and (published / "measurements.parquet").exists()
+    )
+    if fall_back:
+        # The overwhelmingly likely case for anyone who is not us.
+        from_export = published
+        console.print(f"[dim]no corpus at {corpus}; building the published snapshot in "
+                      f"{published}/ instead[/dim]")
+
+    opened = (
+        CorpusStore.from_export(from_export) if from_export is not None else CorpusStore(corpus)
+    )
+    with opened as store, console.status("rendering…"):
         report = build_atlas(store, out)
+    if report.rows == 0:
+        console.print(
+            "[yellow]warning[/yellow] the atlas is empty — nothing was measured. "
+            "Build the published data with [bold]--from-export data[/bold], or measure "
+            "something first."
+        )
 
     summary = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
     summary.add_row("pages", str(report.pages))

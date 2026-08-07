@@ -71,6 +71,36 @@ class CorpusStore:
         self._conn.execute(DDL)
         self._check_schema_version()
 
+    @classmethod
+    def from_export(cls, directory: Path | str) -> Self:
+        """A read-only store backed by a published Parquet snapshot.
+
+        Exists because a clean clone has no corpus — it is dev state and gitignored —
+        so a stranger following the README got a **six-page atlas reporting zero
+        measurements**. The data was sitting in `data/*.parquet` the whole time with
+        nothing able to load it. Hard rule #5 asks that every published number be
+        independently checkable, and "clone it and get an empty site" does not clear
+        that bar.
+
+        Parquet is read through views rather than copied into tables, so the snapshot
+        stays the single source of truth and nothing can accidentally write back to it.
+        """
+        directory = Path(directory)
+        store = cls(":memory:")
+        for table in ("measurements", "recipes", "graph_fingerprints"):
+            path = directory / f"{table}.parquet"
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"{path} is missing. A published snapshot needs measurements, "
+                    "recipes and graph_fingerprints; regenerate one with "
+                    "`edgefit corpus export --out <dir>`."
+                )
+            store._conn.execute(f"DROP TABLE IF EXISTS {table}")
+            store._conn.execute(
+                f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{path.as_posix()}')"
+            )
+        return store
+
     def _check_schema_version(self) -> None:
         """Reject a corpus whose record schema *or* table shape differs from this build.
 
