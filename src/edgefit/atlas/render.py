@@ -308,7 +308,7 @@ def _first_run_cost(rows: list[Row]) -> str:
             f"<td><a href='devices/{row.device_slug}.html'>{escape(row.soc)}</a>"
             f"{_source_mark(row)}</td>"
             + _cell(row.cold_load_ms, 0)
-            + _cell(row.warm_load_ms, 0)
+            + _cell(row.first_inference_ms, 1)
             + _cell(row.primary_ms)
             + f"<td class='num'><strong>{ratio:,.0f}×</strong></td></tr>"
         )
@@ -323,7 +323,7 @@ def _first_run_cost(rows: list[Row]) -> str:
         "with startup cost the headline never shows.</p>"
         '<div class="scroll"><table><thead><tr>'
         "<th>Model</th><th>Device</th><th class='num'>cold load ms</th>"
-        "<th class='num'>warm load ms</th><th class='num'>inference ms</th>"
+        "<th class='num'>first run ms</th><th class='num'>steady ms</th>"
         "<th class='num'>ratio</th>"
         f"</tr></thead><tbody>{''.join(lines)}</tbody></table></div>"
     )

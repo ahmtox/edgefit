@@ -19,7 +19,6 @@ The distinction is recorded on every fallback report rather than left implicit.
 from __future__ import annotations
 
 import contextlib
-import gc
 import glob
 import os
 import tempfile
@@ -328,21 +327,22 @@ class OrtBackend:
         # than merely unlikely.
         peak_bytes = peak_rss_bytes()
 
-        # Warm reload, last and alone: the first session is released so the two are
-        # never resident together. The gap against the cold load is what the delegate
-        # compiled once and can reuse.
+        # Warm load is NOT measured locally, and this is the second attempt abandoned.
+        #
+        # First try: reload while the first session was alive. That measured two
+        # concurrent sessions, reported warm > cold on every row, and inflated
+        # peak_rss_bytes by ~91% of a session.
+        #
+        # Second try: release the session, collect, then reload. Peak RSS was fixed,
+        # but 12 of 46 rows still reported warm >= cold — toxic-comment on the CoreML
+        # ANE came out at cold 2642 ms, warm 4613 ms. Whatever ORT and CoreML do with
+        # compiled artifacts between sessions, it is not a cache we can observe by
+        # timing a second construction in the same process.
+        #
+        # A number that is physically backwards a quarter of the time is not a
+        # measurement. Hard rule #1: null plus a reason, not a plausible-looking
+        # figure. AI Hub reports warm load for hosted rows and those are kept.
         warm_load_ms: float | None = None
-        try:
-            del session
-            gc.collect()
-            warm_started = time.perf_counter_ns()
-            reloaded = self._create_session(
-                model_path, recipe, opt_level=recipe.runtime.graph_optimization_level
-            )
-            warm_load_ms = (time.perf_counter_ns() - warm_started) / 1e6
-            del reloaded
-        except Exception:  # noqa: BLE001 - a warm reload failing is not a measurement failure
-            warm_load_ms = None
 
         return DeviceRun(
             samples_ms=samples_ms,

@@ -38,6 +38,9 @@ except _md.PackageNotFoundError:  # running from a source tree without an instal
 # 0.3.9: 0.3.7/0.3.8 held two ORT sessions at once to time a warm reload, which
 # inflated peak_rss_bytes by ~91% of a session — a new metric silently corrupting
 # an existing one. Those rows overstate memory and are not comparable.
-HARNESS_VERSION = "0.3.9"
+# 0.3.10: local warm_load is abandoned as unmeasurable in-process and recorded as
+# null-with-reason. 0.3.9 rows carry a warm figure that is backwards on a quarter
+# of them, so they are not comparable.
+HARNESS_VERSION = "0.3.10"
 
 __all__ = ["__version__", "HARNESS_VERSION"]

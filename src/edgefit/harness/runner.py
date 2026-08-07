@@ -70,6 +70,13 @@ def _unavailable_on_this_host(*, generative: bool = False) -> dict[str, str]:
         ),
         "accuracy": "tier-3 eval-set accuracy not implemented yet "
         "(numerics checks are not task accuracy)",
+        "warm_load_ms": (
+            "not measurable in-process on this host: reloading a released session did "
+            "not reproduce a warm path — 12 of 46 rows came out warm >= cold, one at "
+            "cold 2642 ms against warm 4613 ms. Whatever ORT and CoreML reuse between "
+            "sessions is not observable by timing a second construction, so this is "
+            "null rather than a figure that is backwards a quarter of the time"
+        ),
     }
     if generative:
         reasons["latency_ms"] = (
