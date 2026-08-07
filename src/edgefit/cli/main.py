@@ -603,6 +603,82 @@ def measure_remote_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("stress")
+def stress_cmd(
+    model: Annotated[str, typer.Option(help="Model ref from the registry.")],
+    recipe: Annotated[Path, typer.Option(help="Recipe YAML.")],
+    workers: Annotated[int, typer.Option(help="CPU-bound competitors to run.")] = 4,
+    corpus: Annotated[Path, typer.Option(help="Corpus database path.")] = DEFAULT_CORPUS_PATH,
+    wait: Annotated[float, typer.Option(help="Seconds to wait for a fit host.")] = 1200.0,
+) -> None:
+    """Measure one recipe clean, then again under load, and report the gap.
+
+    The second rung of §5.6's validation ladder. Both rows go in the corpus with
+    their `stress_profile` set, so a later query can separate them — a corpus that
+    cannot tell clean from stressed can never quantify the gap §2.2 is about.
+
+    Runs clean first *and waits for a fit host before each*, because the comparison
+    is only meaningful if the machine was equally idle at both starts.
+    """
+    from edgefit.backends.artifacts import resolve_artifact  # noqa: PLC0415
+    from edgefit.harness.gate import GateThresholds, wait_until_fit  # noqa: PLC0415
+    from edgefit.harness.hostinfo import probe_device  # noqa: PLC0415
+    from edgefit.harness.runner import measure  # noqa: PLC0415
+    from edgefit.harness.stress import StressSpec  # noqa: PLC0415
+    from edgefit.schema.common import StressProfile  # noqa: PLC0415
+
+    spec = resolve(model)
+    loaded = load_recipe(recipe, spec.ref)
+    artifact = resolve_artifact(spec, loaded)
+    device = probe_device()
+    results = {}
+
+    with CorpusStore(corpus) as store:
+        for label, stress in (
+            ("clean", None),
+            (f"{workers} competitors", StressSpec(StressProfile.CONCURRENT_LOAD, workers=workers)),
+        ):
+            with console.status(f"waiting for a fit host ({label})…"):
+                gate = wait_until_fit(GateThresholds(), device=device, timeout_s=wait)
+            if not gate.passed:
+                console.print(f"  [red]✗[/red] {label:18} host never became fit: {gate.reason()}")
+                continue
+            with console.status(f"measuring {label}…"):
+                outcome = measure(
+                    artifact.directory, loaded, store=store, gate=gate, stress=stress
+                )
+            stats = outcome.record.metrics.latency_ms if outcome.record.metrics else None
+            if stats is None:
+                console.print(f"  [red]✗[/red] {label:18} {outcome.record.failure_reason}")
+                continue
+            results[label] = stats
+            console.print(
+                f"  [green]✓[/green] {label:18} p50 [bold]{stats.p50:.2f}[/bold] ms · "
+                f"p95 {stats.p95:.2f} · cv {stats.cv:.1%}"
+            )
+
+    if len(results) == 2:
+        clean, loaded_stats = results["clean"], results[f"{workers} competitors"]
+        console.print()
+        table = Table(show_header=True, header_style="bold", box=None)
+        table.add_column("statistic")
+        table.add_column("clean", justify="right")
+        table.add_column("under load", justify="right")
+        table.add_column("gap", justify="right")
+        for name, a, b in (
+            ("p50", clean.p50, loaded_stats.p50),
+            ("p95", clean.p95, loaded_stats.p95),
+            ("max", clean.max_ms, loaded_stats.max_ms),
+        ):
+            table.add_row(name, f"{a:.2f} ms", f"{b:.2f} ms", f"{b / a:.2f}×")
+        console.print(table)
+        console.print(
+            "\n[dim]§2.2 puts the benchmark-to-production gap at 3–5× at P99. This is "
+            "one host under synthetic load, not a phone in a pocket — but it is the "
+            "rung that makes the question measurable.[/dim]"
+        )
+
+
 @app.command("sweep-remote")
 def sweep_remote_cmd(
     model: Annotated[

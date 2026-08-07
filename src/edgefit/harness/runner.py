@@ -35,7 +35,9 @@ from edgefit.harness.gate import (
     run_calibration_probe,
 )
 from edgefit.harness.hostinfo import probe_device, probe_state
+from edgefit.harness.stress import Stressor, StressSpec
 from edgefit.harness.timing import MeasurementPolicy, aggregate, is_noisy
+from edgefit.schema.common import StressProfile
 from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.host import DeviceFingerprint
 from edgefit.schema.measurement import FallbackReport, MeasurementRecord, Metrics, Outcome
@@ -294,6 +296,7 @@ def measure(
     lock_timeout_s: float = 0.0,
     calibrate: bool = True,
     gate: GateReport | None = None,
+    stress: StressSpec | None = None,
 ) -> MeasurementOutcome:
     """Measure one (recipe, device) pair. Always produces a record.
 
@@ -341,7 +344,23 @@ def measure(
             return MeasurementOutcome(record=record, analysis=analysis, gate=gate)
 
         # --- tier 2: device ---
-        run = _measure_in_subprocess(artifact_dir, recipe, policy)
+        # Gate-first, then perturb. The gate above proved the host was idle, so the
+        # load the run contends with is the one we applied rather than whatever else
+        # happened to be running. Without that ordering a "stressed" row is
+        # indistinguishable from a row measured on a busy laptop.
+        if stress is None:
+            run = _measure_in_subprocess(artifact_dir, recipe, policy)
+            stress_note = None
+        else:
+            with Stressor(stress) as active:
+                baseline = (gate.probe.baseline_ms if gate.probe else None) or 0.0
+                observed = active.verify_applied(baseline) if baseline else None
+                run = _measure_in_subprocess(artifact_dir, recipe, policy)
+            stress_note = stress.description + (
+                f"; probe measured {observed:.2f}x baseline under load"
+                if observed
+                else "; applied load not verified (no probe baseline)"
+            )
 
     if not run.succeeded:
         record = _failure_record(
@@ -362,6 +381,10 @@ def measure(
                 f"high variance: cv={stats.cv:.3f} exceeds {policy.max_acceptable_cv:.3f}. "
                 "The host was not as quiet as the gate believed; treat this row with suspicion."
             )
+        # Both notes matter and neither should evict the other: a stressed row is
+        # *expected* to be noisier, so the two together are the interpretation.
+        if stress_note:
+            notes = f"{notes} {stress_note}" if notes else stress_note
         record = MeasurementRecord(
             harness_version=HARNESS_VERSION,
             recipe_id=recipe.recipe_id,
@@ -371,6 +394,7 @@ def measure(
             ),
             device=device,
             host_state=gate.host_state,
+            stress_profile=(stress.profile if stress else StressProfile.CLEAN),
             calibration_probe=gate.calibration_probe,
             outcome=Outcome.SUCCESS,
             run_count=stats.n,
