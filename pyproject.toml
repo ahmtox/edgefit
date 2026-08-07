@@ -1,9 +1,10 @@
 [project]
 name = "edgefit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Neutral, reproducible measurement of on-device AI inference, across silicon vendors"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+# 3.13 verified: onnxruntime, duckdb, pyarrow and onnx all publish wheels for it.
+requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Alan Morelos" }]
@@ -19,6 +20,7 @@ classifiers = [
     "Topic :: System :: Benchmark",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
 ]

@@ -3,7 +3,16 @@
 Pass 1 is the measurement harness: ``(model, recipe, device) -> measurement``.
 """
 
-__version__ = "0.0.1"
+# Read from installed metadata rather than hardcoded. The two drifted immediately:
+# pyproject went to 0.1.0 for the first release and this string stayed at 0.0.1, so
+# the published package told users the wrong version of itself. One source of truth
+# removes the whole class of mistake.
+from importlib import metadata as _md
+
+try:  # pragma: no cover - trivial, and the fallback only fires when not installed
+    __version__ = _md.version("edgefit")
+except _md.PackageNotFoundError:  # running from a source tree without an install
+    __version__ = "0+unknown"
 
 # Bumped whenever anything that could change a measured number changes: timing
 # policy, warmup counts, gate thresholds, subprocess protocol, metric definitions,
