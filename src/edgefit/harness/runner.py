@@ -384,6 +384,9 @@ def measure(
                 peak_rss_bytes=run.peak_rss_bytes,
                 artifact_bytes=analysis.artifact_bytes,
                 lowering_ms=analysis.lowering_ms,
+                cold_load_ms=run.cold_load_ms,
+                warm_load_ms=run.warm_load_ms,
+                first_inference_ms=run.first_inference_ms,
                 output_cosine_vs_reference=(
                     None if generative else _output_cosine(
                         run.outputs, artifact_dir / "reference.npz"

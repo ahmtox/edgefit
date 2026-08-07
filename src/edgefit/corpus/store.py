@@ -249,6 +249,7 @@ class CorpusStore:
                 $latency_p50_ms, $latency_p95_ms, $latency_cv,
                 $ttft_p50_ms, $ttft_cv, $decode_tok_s_p50, $sustained_tok_s_5min,
                 $peak_rss_bytes, $artifact_bytes, $lowering_ms,
+                $cold_load_ms, $warm_load_ms, $first_inference_ms,
                 $accuracy, $accuracy_delta_vs_fp16, $output_cosine_vs_reference,
                 $token_agreement, $power_mw,
                 $fallback_node_pct, $fallback_flops_pct, $fallback_time_pct,
@@ -292,6 +293,9 @@ class CorpusStore:
                 "peak_rss_bytes": metrics.peak_rss_bytes if metrics else None,
                 "artifact_bytes": metrics.artifact_bytes if metrics else None,
                 "lowering_ms": metrics.lowering_ms if metrics else None,
+                "cold_load_ms": metrics.cold_load_ms if metrics else None,
+                "warm_load_ms": metrics.warm_load_ms if metrics else None,
+                "first_inference_ms": metrics.first_inference_ms if metrics else None,
                 "accuracy": metrics.accuracy if metrics else None,
                 "accuracy_delta_vs_fp16": metrics.accuracy_delta_vs_fp16 if metrics else None,
                 "output_cosine_vs_reference": (

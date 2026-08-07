@@ -285,18 +285,40 @@ class OrtBackend:
         feeds = self._feeds(artifact_dir, recipe)
 
         try:
+            # Cold load: the whole cost of getting to a runnable state — session
+            # creation, delegate init, ahead-of-time kernel compilation. This is what
+            # a user waits through before the first inference, and it dwarfs it.
+            cold_started = time.perf_counter_ns()
             session = self._create_session(
                 model_path, recipe, opt_level=recipe.runtime.graph_optimization_level
             )
+            cold_load_ms = (time.perf_counter_ns() - cold_started) / 1e6
         except Exception as exc:  # noqa: BLE001
             return DeviceRun(failure_reason=f"session creation failed: {exc}")
 
+        # Warm load: the same work with the runtime's caches populated. The gap
+        # between the two is what a delegate compiles ahead of time and then reuses,
+        # which is why it is worth reporting separately rather than averaging.
+        warm_load_ms: float | None = None
         try:
-            # Warmup runs are discarded (PROJECT.md §5.6): first-call cost includes
-            # lazy kernel compilation and CoreML model caching, which is a real
-            # cost but a different one from steady-state latency.
-            for _ in range(warmup):
+            warm_started = time.perf_counter_ns()
+            self._create_session(
+                model_path, recipe, opt_level=recipe.runtime.graph_optimization_level
+            )
+            warm_load_ms = (time.perf_counter_ns() - warm_started) / 1e6
+        except Exception:  # noqa: BLE001 - a warm reload failing is not a measurement failure
+            warm_load_ms = None
+
+        first_inference_ms: float | None = None
+        try:
+            # Warmup runs stay out of the steady-state distribution (§5.6) because
+            # they include lazy compilation. But the *first* one is what a user
+            # actually experiences, so it is timed and recorded rather than binned.
+            for index in range(warmup):
+                started = time.perf_counter_ns()
                 session.run(None, feeds)
+                if index == 0:
+                    first_inference_ms = (time.perf_counter_ns() - started) / 1e6
 
             samples_ms: list[float] = []
             outputs = None
@@ -313,6 +335,9 @@ class OrtBackend:
             samples_ms=samples_ms,
             peak_rss_bytes=peak_rss_bytes(),
             warmup_count=warmup,
+            cold_load_ms=cold_load_ms,
+            warm_load_ms=warm_load_ms,
+            first_inference_ms=first_inference_ms,
             outputs={
                 name: np.asarray(value).ravel()[:512].tolist()
                 for name, value in zip(output_names, outputs or [], strict=False)

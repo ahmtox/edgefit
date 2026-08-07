@@ -459,6 +459,11 @@ def build_record(
             latency_ms=stats,
             peak_rss_bytes=profile.peak_memory_bytes,
             lowering_ms=profile.compile_ms,
+            # Promoted out of `notes`: these were always reported, and on a Galaxy
+            # S24 the cold load is 1100x the inference it enables. A number that
+            # large does not belong in a free-text field.
+            cold_load_ms=profile.cold_load_ms,
+            warm_load_ms=profile.warm_load_ms,
             unavailable={
                 "artifact_bytes": (
                     "AI Hub compiles the model server-side and compile jobs are broken "
@@ -468,6 +473,11 @@ def build_record(
                 "accuracy": "tier-3 eval-set accuracy not implemented yet",
                 "output_cosine_vs_reference": (
                     "a profile job returns timings only; use an inference job to compare outputs"
+                ),
+                "first_inference_ms": (
+                    "AI Hub reports load and steady-state inference times but not the "
+                    "duration of the first run specifically, so it is not derivable "
+                    "from what the service exposes"
                 ),
                 "sustained_tok_s_5min": "not a generative measurement",
                 "ttft_ms": "not a generative measurement",

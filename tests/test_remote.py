@@ -351,3 +351,26 @@ def test_a_local_recipe_is_rejected_by_the_remote_path(cpu_recipe) -> None:
 
     with pytest.raises(RemoteMeasurementError, match="not a hosted device"):
         submit_profile(cpu_recipe, __import__("pathlib").Path("."))
+
+
+class TestFirstInferenceCost:
+    """Hard rule #4: the cost of getting to a runnable state is part of the number.
+
+    Measured on a Galaxy S24: an 8.5 s cold load in front of a 7.68 ms inference —
+    1100x. And it is not a constant offset, so it cannot be waved away: on the same
+    device the CPU-only path loaded 14x faster than the NPU path, which means the
+    accelerator's headline win is partly bought with startup cost.
+    """
+
+    def test_load_times_are_metrics_not_prose(self) -> None:
+        metrics = build_record(_recipe(), _profile(), None).metrics
+        assert metrics is not None
+        assert metrics.cold_load_ms == pytest.approx(40.0)
+        assert metrics.warm_load_ms == pytest.approx(12.0)
+
+    def test_first_inference_is_refused_rather_than_inferred(self) -> None:
+        """The service reports load and steady state, but not the first run itself."""
+        metrics = build_record(_recipe(), _profile(), None).metrics
+        assert metrics is not None
+        assert metrics.first_inference_ms is None
+        assert "first run" in metrics.unavailable["first_inference_ms"]

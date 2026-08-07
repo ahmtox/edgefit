@@ -49,6 +49,12 @@ class DeviceRun:
 
     samples_ms: list[float] = field(default_factory=list)
     peak_rss_bytes: int | None = None
+
+    # First-inference cost. The warmup runs were always measured and always thrown
+    # away; a user does not get to discard them, so they are now recorded.
+    cold_load_ms: float | None = None
+    warm_load_ms: float | None = None
+    first_inference_ms: float | None = None
     warmup_count: int = 0
     outputs: dict[str, list] | None = None
     failure_reason: str | None = None

@@ -214,6 +214,32 @@ class Metrics(_Frozen):
         default=None,
         description="Hard rule #4: pipeline cost counts, not just kernel time.",
     )
+    # First-inference cost (hard rule #4). Measured on a Galaxy S24: an 8.5 s model
+    # load in front of a 7.68 ms inference — 1100x. A user opening the app pays it;
+    # a benchmark quoting steady-state latency never mentions it. And it is not a
+    # constant offset: on the same device the CPU-only path loaded 14x faster than
+    # the NPU path (612 ms vs 8526 ms), so the accelerator's win is partly bought
+    # with startup cost the headline hides.
+    cold_load_ms: float | None = Field(
+        default=None,
+        description=(
+            "Loading the model into a runnable state from cold: session creation, "
+            "delegate initialisation and any ahead-of-time kernel compilation. Not "
+            "the export — that is lowering_ms — and not the first inference."
+        ),
+    )
+    warm_load_ms: float | None = Field(
+        default=None,
+        description="The same load with the runtime's caches already populated.",
+    )
+    first_inference_ms: float | None = Field(
+        default=None,
+        description=(
+            "The first timed run, which the steady-state distribution deliberately "
+            "discards as warmup. Kept because for a user it is not warmup: it is the "
+            "latency of opening the app."
+        ),
+    )
     reported_latency_ms: float | None = Field(
         default=None,
         description=(

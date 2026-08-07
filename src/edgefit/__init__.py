@@ -21,6 +21,8 @@ __version__ = "0.0.1"
 # bumping only the exporter left 11 stale `lowering_failure` rows counting as "already
 # done" against a defect that had just been fixed.
 # 0.3.6: EXPORTER_VERSION 4 → 5 (frozen-token text export).
-HARNESS_VERSION = "0.3.6"
+# 0.3.7: cold/warm load and first-inference are measured and recorded. New metrics
+# mean a new corpus shape, and rows without them are not comparable to rows with.
+HARNESS_VERSION = "0.3.7"
 
 __all__ = ["__version__", "HARNESS_VERSION"]
