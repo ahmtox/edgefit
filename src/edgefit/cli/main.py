@@ -889,6 +889,32 @@ def corpus_list(
     console.print(table)
 
 
+@corpus_app.command("migrate")
+def corpus_migrate(
+    source: Annotated[Path, typer.Option(help="Corpus written by an older schema.")],
+    dest: Annotated[Path, typer.Option(help="New corpus to create.")],
+) -> None:
+    """Copy an older corpus into the current schema.
+
+    Adding a metric widens the table, and the schema guard then refuses the old file
+    rather than silently reading it wrong. Every row stores its own canonical JSON, so
+    migration re-validates and re-inserts each record: columns added since a row was
+    written come through as null, and nothing is invented to fill them.
+
+    Rows keep their original `harness_version`, because they were measured under it.
+    """
+    from edgefit.corpus.store import migrate  # noqa: PLC0415
+
+    with console.status(f"migrating {source} → {dest}…"):
+        counts = migrate(source, dest)
+
+    table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    for name, n in counts.items():
+        table.add_row(name, str(n))
+    console.print(table)
+    console.print(f"\n{_OK}  {dest}")
+
+
 @corpus_app.command("export")
 def corpus_export(
     out: Annotated[Path, typer.Option(help="Output directory.")] = Path("corpus/export"),

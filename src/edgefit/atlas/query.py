@@ -85,6 +85,9 @@ class Row:
     artifact_mib: float | None
     lowering_ms: float | None
     cosine: float | None
+    cold_load_ms: float | None
+    warm_load_ms: float | None
+    first_inference_ms: float | None
     fb_flops_authored: float | None
     fb_node_authored: float | None
     fb_time_as_run: float | None
@@ -271,6 +274,7 @@ SELECT m.measurement_id, m.model_ref, r.task, coalesce(r.label, r.intended_provi
        m.latency_p50_ms, m.latency_p95_ms, m.latency_cv,
        m.ttft_p50_ms, m.ttft_cv, m.decode_tok_s_p50, m.token_agreement,
        m.peak_rss_bytes, m.artifact_bytes, m.lowering_ms, m.output_cosine_vs_reference,
+       m.cold_load_ms, m.warm_load_ms, m.first_inference_ms,
        m.fallback_flops_pct, m.fallback_node_pct, m.as_run_time_pct, m.as_run_partitions,
        m.thermal_state, m.power_source, m.calibration_ratio,
        m.harness_version, m.created_at, m.stress_profile,
@@ -296,7 +300,7 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
             device_id, device_model, soc, os_version, os_build,
             outcome, reason, run_count, warmup_count, p50, p95, cv, ttft, ttft_cv,
             decode, tok_agree,
-            rss, artifact, lowering, cosine,
+            rss, artifact, lowering, cosine, cold_load, warm_load, first_inf,
             fb_flops, fb_node, as_run_time, as_run_parts,
             thermal, power, calib, harness, created, stress,
             source, source_detail,
@@ -335,6 +339,9 @@ def load_rows(store: CorpusStore, recipe_paths: dict[str, str] | None = None) ->
                 artifact_mib=artifact / _MIB if artifact else None,
                 lowering_ms=lowering,
                 cosine=cosine,
+                cold_load_ms=cold_load,
+                warm_load_ms=warm_load,
+                first_inference_ms=first_inf,
                 fb_flops_authored=fb_flops,
                 fb_node_authored=fb_node,
                 fb_time_as_run=as_run_time,

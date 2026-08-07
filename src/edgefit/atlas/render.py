@@ -161,6 +161,7 @@ _MATRIX_HEAD = """
 <th class="sortable num">cv</th>
 <th class="sortable num">size MiB</th>
 <th class="sortable num">peak RSS</th>
+<th class="sortable num">first run ms</th>
 <th class="sortable num">cosine</th>
 <th class="sortable num">fallback (run)</th>
 </tr>
@@ -236,6 +237,7 @@ def _matrix_row(row: Row, *, depth: int) -> str:
         + _cell(None if row.primary_cv is None else row.primary_cv * 100, 1, "%")
         + _cell(row.artifact_mib, 0)
         + _cell(row.peak_rss_mib, 0)
+        + _cell(row.first_inference_ms or row.cold_load_ms, 0)
         + _cell(row.cosine, 4)
         + _cell(row.fb_time_as_run, 1, "%")
         + "</tr>"
@@ -276,9 +278,55 @@ def index(summary: Summary, rows: list[Row], models: list[Model]) -> str:
         "</thead><tbody>",
         "".join(_matrix_row(row, depth=0) for row in rows),
         "</tbody></table></div>",
+        _first_run_cost(rows),
         _headline_findings(models),
     ]
     return page("The matrix", "".join(body), here="")
+
+
+def _first_run_cost(rows: list[Row]) -> str:
+    """What it costs to get to the first inference, against the inference itself.
+
+    Steady-state latency is the number everyone quotes and it describes the second
+    run onward. The first one includes loading the model, initialising the delegate
+    and compiling kernels, and on a phone that is not a rounding error: 8.5 seconds
+    in front of a 7.68 ms inference. Hard rule #4 says the pipeline counts, so the
+    pipeline is shown.
+    """
+    have = [
+        r for r in rows
+        if r.ok and r.cold_load_ms and (r.primary_ms or 0) > 0
+    ]
+    if not have:
+        return ""
+    have.sort(key=lambda r: -(r.cold_load_ms or 0) / (r.primary_ms or 1))
+    lines = []
+    for row in have[:12]:
+        ratio = (row.cold_load_ms or 0) / (row.primary_ms or 1)
+        lines.append(
+            f"<tr><td><a href='models/{row.model_slug}.html'>{escape(row.model_name)}</a></td>"
+            f"<td><a href='devices/{row.device_slug}.html'>{escape(row.soc)}</a>"
+            f"{_source_mark(row)}</td>"
+            + _cell(row.cold_load_ms, 0)
+            + _cell(row.warm_load_ms, 0)
+            + _cell(row.primary_ms)
+            + f"<td class='num'><strong>{ratio:,.0f}×</strong></td></tr>"
+        )
+    return (
+        "<h2>What the first run costs</h2>"
+        "<p>Every latency figure above describes the <em>second</em> run onward. The "
+        "first one also loads the model, initialises the delegate and compiles "
+        "kernels — and a user opening an app pays that, once, every cold start.</p>"
+        "<p class='dim'>The ratio is not a constant offset that could be subtracted. "
+        "On the same phone, forcing a model onto the CPU loaded far faster than "
+        "letting it reach the NPU, so part of an accelerator's headline win is bought "
+        "with startup cost the headline never shows.</p>"
+        '<div class="scroll"><table><thead><tr>'
+        "<th>Model</th><th>Device</th><th class='num'>cold load ms</th>"
+        "<th class='num'>warm load ms</th><th class='num'>inference ms</th>"
+        "<th class='num'>ratio</th>"
+        f"</tr></thead><tbody>{''.join(lines)}</tbody></table></div>"
+    )
 
 
 def _headline_findings(models: list[Model]) -> str:
@@ -909,6 +957,26 @@ the embedding it indexes, and the job fails with an error that looks like the de
 refusing the model. It is not. We now refuse to submit such models rather than record
 a failure against hardware that did nothing wrong, which is why the text models
 measured on our own devices have no Snapdragon rows here.</p>
+
+<h3 id="firstrun">The first run is not warmup</h3>
+<p>Steady-state latency is measured after discarded warmup runs, because the first call
+includes lazy kernel compilation and delegate caching — a real cost, but a different one
+from the per-inference cost that dominates a busy app.</p>
+<p>That reasoning is standard and it quietly hides something large. A user opening an app
+cold pays the model load <em>and</em> the first inference, and on a phone the load can be
+three orders of magnitude bigger than the inference it enables. So both are recorded:
+<span class="mono">cold_load_ms</span> (session creation, delegate initialisation,
+ahead-of-time compilation), <span class="mono">warm_load_ms</span> (the same with caches
+populated) and <span class="mono">first_inference_ms</span> (the first run, timed rather
+than binned).</p>
+<p>The reason this is a column and not a footnote: <strong>it is not a constant
+offset</strong>. On one device, the CPU-only path loaded an order of magnitude faster
+than the path that reached the NPU — so an accelerator's speedup is partly financed by
+startup cost, and subtracting a fixed number would misrepresent both.</p>
+<p>Hosted rows carry load times but not
+<span class="mono">first_inference_ms</span>: the service reports load and steady state,
+not the duration of the first run specifically, so it is null with that reason rather
+than derived.</p>
 
 <h3 id="gate">The gate: we refuse rather than annotate</h3>
 <p>Before every measurement the host is checked, and if it fails the measurement does

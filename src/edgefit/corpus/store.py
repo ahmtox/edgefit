@@ -394,3 +394,41 @@ class CorpusStore:
             {"value": value},
         ).fetchone()
         return row is not None
+
+
+def migrate(source: Path | str, destination: Path | str) -> dict[str, int]:
+    """Copy an older corpus into the current schema, losslessly.
+
+    Every table stores the record's canonical JSON in ``payload``, which exists for
+    exactly this: the denormalised columns are a query convenience, and the payload is
+    the record. Migration re-validates each payload against today's models and inserts
+    it, so a schema that gained a column picks up ``NULL`` for the rows that predate it
+    without anything being invented.
+
+    **This does not violate immutability.** Hard rule #3 forbids `UPDATE`, and nothing
+    here updates: records are copied unchanged into a new container, keeping their
+    original ``harness_version``. A row measured under 0.3.6 stays a 0.3.6 row, which
+    is what makes it honest to keep — and what tells a later reader why its newer
+    columns are empty.
+    """
+    import json  # noqa: PLC0415
+
+    source, destination = Path(source), Path(destination)
+    if not source.exists():
+        raise FileNotFoundError(f"no corpus at {source}")
+
+    old = duckdb.connect(str(source), read_only=True)
+    counts = {"recipes": 0, "graph_fingerprints": 0, "measurements": 0}
+    try:
+        with CorpusStore(destination) as new:
+            for table, model, insert in (
+                ("recipes", Recipe, lambda r: new.insert_recipe(r)),
+                ("graph_fingerprints", GraphFingerprint, lambda f: new.insert_fingerprint(f)),
+                ("measurements", MeasurementRecord, lambda m: new.insert_measurement(m)),
+            ):
+                for (payload,) in old.execute(f"SELECT payload FROM {table}").fetchall():
+                    insert(model.model_validate(json.loads(payload)))
+                    counts[table] += 1
+    finally:
+        old.close()
+    return counts
