@@ -47,8 +47,14 @@ def test_peak_rss_tracks_a_known_allocation() -> None:
     )
     growth = int(result.stdout.strip())
 
+    # The tolerance is wide on purpose, and a Linux CI runner showed why. This test
+    # catches a *unit* error — treating KB as bytes misses by 1024x — not allocator
+    # behaviour. macOS faults in the whole buffer and lands within a few percent;
+    # Linux reported 130 MiB for the same 200 MiB allocation, which is not a scale
+    # error but the kernel accounting resident pages differently. A band that catches
+    # 1024x in either direction is exactly as strict as the claim, and no stricter.
     expected = _ALLOCATION_MIB * 1024**2
-    assert growth == pytest.approx(expected, rel=0.25), (
+    assert expected / 4 < growth < expected * 4, (
         f"peak RSS grew by {growth} bytes for a {expected}-byte allocation "
         "— check the ru_maxrss unit scale for this platform"
     )

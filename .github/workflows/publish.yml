@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
+      - run: uv sync --all-extras --group dev
       # The gate runs before anything ships. A release that fails its own fast suite
       # is not a release.
       - run: uv run pytest -q

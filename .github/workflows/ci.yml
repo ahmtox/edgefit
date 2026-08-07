@@ -6,7 +6,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
+      # All extras: the fast suite exercises export and the hosted backend, and a
+      # suite that silently skips them is not the gate it claims to be.
+      - run: uv sync --all-extras --group dev
       # Device-marked tests are excluded by default: they need real hardware and a
       # host quiet enough to pass the gate, neither of which a CI runner is.
       - run: uv run pytest -q
