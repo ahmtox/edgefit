@@ -19,12 +19,16 @@ Product strategy and roadmap are not published.
 
 **[Your accelerator probably isn't running your model](docs/silent-fallback.md)**
 
-One vision model, exported once to fp32 ONNX, profiled on eleven mobile SoCs from
-Qualcomm, Google and Samsung. Three ran it on the NPU. **Eight ran every node on the
-CPU** — no error, no warning, correct results. Fastest 6.26 ms, slowest 820.37 ms:
+Five models — three text, two vision — each exported once to fp32 ONNX and profiled on
+up to eleven mobile SoCs from Qualcomm, Google and Samsung.
+
+**Every device is either fully accelerated on every model, or runs every node on the
+CPU.** Not one mixed case in 45 measurements. Three SoCs accelerate; eight do not — no
+error, no warning, correct results throughout. Fastest 6.26 ms, slowest 820.37 ms:
 **131× on the same file.**
 
-Two 2024 flagships: Galaxy S24 at **7.68 ms**, Pixel 9 at **303.76 ms**. 39.5× apart.
+Two 2024 flagships, same artifacts: Galaxy S24 vs Pixel 9 runs **15× to 40× apart**
+depending on the model.
 
 And the mirror image on Apple: ONNX Runtime's CoreML provider makes **four of six
 models slower** than plain CPU, also silently.

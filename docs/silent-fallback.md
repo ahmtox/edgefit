@@ -6,8 +6,9 @@
 
 ## The short version
 
-We took one vision model, exported it once to fp32 ONNX, and profiled that single
-artifact on eleven mobile SoCs from Qualcomm, Google and Samsung.
+We took five models — three text encoders and two vision — exported each once to fp32
+ONNX, and profiled those artifacts on up to eleven mobile SoCs from Qualcomm, Google and
+Samsung.
 
 **Three of them ran it on the NPU. Eight ran every single node on the CPU.**
 
@@ -31,16 +32,37 @@ device runs it in **6.26 ms**; the slowest CPU-only device takes **820.37 ms**. 
 
 Model: `google/vit-base-patch16-224-in21k`, fp32 ONNX, batch 1, 224×224.
 
-The split is not about the model. `openai/clip-vit-base-patch32` reproduces it exactly:
-the same three SoCs accelerate, the same eight do not.
+**The split is not about the model — it is entirely about the SoC.** Every device is
+either fully accelerated on *every* model, or fully on the CPU for *every* model. There
+is not one mixed case in 45 measurements:
+
+| device | SoC | models accelerated |
+|---|---|---|
+| Snapdragon 8 Elite QRD | sm8750 | **6 of 6** |
+| Samsung Galaxy S24 | sm8650 | **5 of 5** |
+| Samsung Galaxy S23 | sm8550 | **5 of 5** |
+| Google Pixel 7 / 9 | tensor-g2 / g4 | 0 of 5 |
+| Samsung Galaxy S21 | sm8350 | 0 of 5 |
+| Google Pixel 3 | sdm845 | 0 of 5 |
+| Samsung Galaxy A53 5G | exynos-1280 | 0 of 5 |
+
+Text models behave identically to vision ones. `all-MiniLM-L6-v2` puts 226 of 226 nodes
+on a Galaxy S24's NPU and runs in **1.52 ms**; on a Pixel 9 it runs entirely on the CPU
+at 23.34 ms. `toxic-comment` and `bart-base` reproduce the same split exactly.
 
 ## The number that should bother you
 
 Look at two phones from the same year, at the same price point, in the same pocket:
 
-> **Samsung Galaxy S24 — 7.68 ms.  Google Pixel 9 — 303.76 ms.**
->
-> The same file. **39.5× apart.**
+| model | Galaxy S24 | Pixel 9 | gap |
+|---|---:|---:|---:|
+| vit-base-patch16-224 | 7.68 ms | 303.76 ms | **39.6×** |
+| toxic-comment | 2.62 ms | 91.88 ms | **35.1×** |
+| bart-base | 2.66 ms | 93.00 ms | **35.0×** |
+| clip-vit-base-patch32 | 2.80 ms | 84.76 ms | **30.3×** |
+| all-MiniLM-L6-v2 | 1.52 ms | 23.34 ms | **15.4×** |
+
+Same files. Both phones from 2024, both flagships.
 
 If your fleet analytics say those two devices are 20% of your users each, no single
 benchmark number describes your application. You cannot average them. You cannot pick

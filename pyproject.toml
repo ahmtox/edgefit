@@ -1,6 +1,6 @@
 [project]
 name = "edgefit"
-version = "0.0.1"
+version = "0.1.0"
 description = "Neutral, reproducible measurement of on-device AI inference, across silicon vendors"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
