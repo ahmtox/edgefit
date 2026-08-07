@@ -642,10 +642,11 @@ def sweep_remote_cmd(
 
     refs = list(model or [])
     if not refs:
-        # Vision only by default: a hosted profiler invents its own inputs, and an
-        # index input cannot be invented. Submitting text models would burn a
-        # provision each to relearn that.
-        refs = [r for r in known_refs() if resolve(r).exporter == "vision"]
+        # Everything except decoders. Text models used to be excluded — a hosted
+        # profiler invents its own inputs and cannot invent a token id — but freezing
+        # the ids into the graph leaves a single float input, so they are profilable
+        # now. Decoders still are not: a KV cache needs real state, not random values.
+        refs = [r for r in known_refs() if resolve(r).exporter in ("vision", "text")]
 
     console.print(
         f"[bold]{len(refs)} model(s) × {len(names)} device(s)[/bold] "

@@ -20,6 +20,7 @@ __version__ = "0.0.1"
 # exporter change must bump this too — resume keys on (device, harness_version), and
 # bumping only the exporter left 11 stale `lowering_failure` rows counting as "already
 # done" against a defect that had just been fixed.
-HARNESS_VERSION = "0.3.5"
+# 0.3.6: EXPORTER_VERSION 4 → 5 (frozen-token text export).
+HARNESS_VERSION = "0.3.6"
 
 __all__ = ["__version__", "HARNESS_VERSION"]

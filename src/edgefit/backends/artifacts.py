@@ -103,12 +103,18 @@ def resolve_artifact(
         artifact_root=root,
         opset=recipe.lowering.opset,
         static_shapes=recipe.lowering.static_shapes,
+        frozen_tokens=recipe.lowering.frozen_token_inputs,
         force=force,
     )
     if recipe.quantization is None:
         return base
 
-    base_key = artifact_key(spec, recipe.lowering.opset, recipe.lowering.static_shapes)
+    base_key = artifact_key(
+        spec,
+        recipe.lowering.opset,
+        recipe.lowering.static_shapes,
+        recipe.lowering.frozen_token_inputs,
+    )
     key = variant_key(base_key, recipe.quantization)
     directory = root / f"{spec.slug}__q{key}"
     model_path = directory / "model.onnx"

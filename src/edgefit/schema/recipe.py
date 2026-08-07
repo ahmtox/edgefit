@@ -113,6 +113,16 @@ class LoweringConfig(_Frozen):
     """
 
     opset: int = Field(default=17, gt=0)
+    frozen_token_inputs: bool = Field(
+        default=False,
+        description=(
+            "Bake token ids into the graph as constants and expose only a float "
+            "attention mask. Exists because hosted profilers synthesize random inputs "
+            "and a random integer is not a valid index — this makes a text model "
+            "profilable there. Same work, different input surface, and it is a "
+            "separate artifact so it can never be confused with a normal export."
+        ),
+    )
     static_shapes: bool = Field(
         default=True,
         description=(

@@ -49,7 +49,10 @@ DEFAULT_OPSET = 17
 #: v4 filters harness inputs by what the model's forward accepts and reconciles
 #: inputs.npz against the exported graph, so a tokenizer emitting more than the model
 #: takes can no longer put an unusable tensor in the artifact.
-EXPORTER_VERSION = 4
+#:
+#: v5 adds the frozen-token text export, which changes the input surface of an
+#: artifact and therefore its identity.
+EXPORTER_VERSION = 5
 
 #: Files the harness writes alongside the model; not part of the shipped artifact.
 HARNESS_SIDECARS = frozenset({"inputs.npz", "reference.npz", "meta.json"})
@@ -99,7 +102,9 @@ class ExportedArtifact:
             return {name: data[name] for name in data.files}
 
 
-def artifact_key(spec: ModelSpec, opset: int, static_shapes: bool) -> str:
+def artifact_key(
+    spec: ModelSpec, opset: int, static_shapes: bool, frozen_tokens: bool = False
+) -> str:
     return content_hash(
         {
             "hf_id": spec.hf_id,
@@ -110,6 +115,7 @@ def artifact_key(spec: ModelSpec, opset: int, static_shapes: bool) -> str:
             "submodule": spec.submodule,
             "opset": opset,
             "static_shapes": static_shapes,
+            "frozen_tokens": frozen_tokens,
             "shape": spec.static_shape,
         }
     )
@@ -229,6 +235,75 @@ def _build_text(spec: ModelSpec):
     return TextWrapper(model).eval(), names, args, [output_attr], model.config
 
 
+def _build_text_frozen(spec: ModelSpec):
+    """Text model with its token ids baked in, exposing only a float mask.
+
+    A hosted profiler generates its own inputs and cannot be given real ones. For a
+    float tensor that is harmless; for an *index* it is not, because a random int64 is
+    not a token id and the embedding Gather goes out of bounds. Every text model was
+    therefore unprofilable on hosted hardware — which is why the fleet finding covers
+    vision only.
+
+    The fix is to stop asking the profiler for indices. Token ids become constants in
+    the graph, and the one remaining input is the attention mask as float32, which
+    genuinely feeds attention (so the exporter cannot prune it) and has no valid range
+    to fall outside of.
+
+    **What this changes and does not change.** The work is identical: the same
+    embedding lookup runs, over the same sequence length, through the same layers —
+    latency does not depend on *which* tokens. What changes is that the mask holds
+    random values rather than ones, so the output is numerically meaningless. That
+    costs nothing here, because hosted rows already record
+    `output_cosine_vs_reference` as unavailable: a profile job returns timings only.
+
+    Kept as a separate artifact and a separate recipe axis rather than a quiet
+    substitution, so a frozen-token row can never be mistaken for a normal one.
+    """
+    import torch  # noqa: PLC0415
+    from transformers import AutoTokenizer  # noqa: PLC0415
+
+    tokenizer = AutoTokenizer.from_pretrained(spec.hf_id)
+    model = _load_hf_model(spec)
+    accepted = _accepted_arguments(model)
+    if "attention_mask" not in accepted:
+        raise ExportError(
+            f"{spec.hf_id} does not accept `attention_mask`, so there is no float input "
+            "to expose once token ids are frozen. A graph with no inputs cannot be "
+            "profiled by a service that generates its own."
+        )
+
+    encoded = tokenizer(
+        _CALIBRATION_TEXT,
+        return_tensors="pt",
+        padding="max_length",
+        max_length=spec.static_shape["sequence"],
+        truncation=True,
+    )
+    frozen = [
+        name
+        for name in ("input_ids", "token_type_ids")
+        if name in encoded and name in accepted
+    ]
+    output_attr = spec.output_attr
+
+    class FrozenTextWrapper(torch.nn.Module):
+        def __init__(self, inner) -> None:
+            super().__init__()
+            self.inner = inner
+            for name in frozen:
+                # A buffer, so torch.onnx.export emits it as an initializer rather
+                # than as a graph input.
+                self.register_buffer(f"frozen__{name}", encoded[name])
+
+        def forward(self, attention_mask):
+            kwargs = {name: getattr(self, f"frozen__{name}") for name in frozen}
+            kwargs["attention_mask"] = attention_mask
+            return getattr(self.inner(**kwargs), output_attr)
+
+    mask = encoded["attention_mask"].to(torch.float32)
+    return FrozenTextWrapper(model).eval(), ["attention_mask"], (mask,), [output_attr], model.config
+
+
 def _build_vision(spec: ModelSpec):
     """Vision model fed a deterministic synthetic image.
 
@@ -276,6 +351,7 @@ def export_onnx(
     artifact_root: Path | str = DEFAULT_ARTIFACT_ROOT,
     opset: int = DEFAULT_OPSET,
     static_shapes: bool = True,
+    frozen_tokens: bool = False,
     force: bool = False,
 ) -> ExportedArtifact:
     """Export to ONNX, capturing inputs and the fp32 reference output.
@@ -288,7 +364,9 @@ def export_onnx(
     torch is imported only on a cache miss, so replaying an already-exported
     artifact needs nothing but the thin runtime dependency set.
     """
-    directory = Path(artifact_root) / f"{spec.slug}__{artifact_key(spec, opset, static_shapes)}"
+    key = artifact_key(spec, opset, static_shapes, frozen_tokens)
+    suffix = "__frozen" if frozen_tokens else ""
+    directory = Path(artifact_root) / f"{spec.slug}__{key}{suffix}"
     model_path = directory / "model.onnx"
     inputs_path = directory / "inputs.npz"
     reference_path = directory / "reference.npz"
@@ -307,7 +385,12 @@ def export_onnx(
 
     import torch
 
-    builder = _BUILDERS.get(spec.exporter)
+    if frozen_tokens and spec.exporter != "text":
+        raise ExportError(
+            f"frozen token inputs only apply to text models; {spec.hf_id} uses the "
+            f"{spec.exporter!r} harness, whose inputs are already float."
+        )
+    builder = _build_text_frozen if frozen_tokens else _BUILDERS.get(spec.exporter)
     if builder is None:
         raise ValueError(f"no exporter named {spec.exporter!r} for {spec.ref}")
 

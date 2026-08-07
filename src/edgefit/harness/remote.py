@@ -620,13 +620,26 @@ def sweep_remote(
         if on_event is not None:
             on_event(kind, cell, detail)
 
+    def lowering_for(spec) -> dict:
+        """Text models need their token ids frozen to be profilable here at all.
+
+        A hosted profiler invents its own inputs and cannot invent a valid token id,
+        so an index-input graph is refused. Freezing the ids into the graph leaves a
+        single float input, which is always in range. Applied automatically because
+        the alternative is not "a normal text row" but no row at all.
+        """
+        return {
+            "static_shapes": spec.exporter != "decoder",
+            "frozen_token_inputs": spec.exporter == "text",
+        }
+
     usable: list[tuple[str, object, Path]] = []
     for ref in model_refs:
         spec = resolve(ref)
         recipe = Recipe(
             model=ModelRef(ref=spec.ref, task=spec.task),
             runtime=QaiHubRuntimeConfig(device_name=device_names[0], compute_unit=compute_unit),
-            lowering={"static_shapes": spec.exporter != "decoder"},
+            lowering=lowering_for(spec),
         )
         artifact = resolve_artifact(spec, recipe)
         try:
@@ -646,7 +659,7 @@ def sweep_remote(
             recipe = Recipe(
                 model=ModelRef(ref=spec.ref, task=spec.task),
                 runtime=QaiHubRuntimeConfig(device_name=name, compute_unit=compute_unit),
-                lowering={"static_shapes": spec.exporter != "decoder"},
+                lowering=lowering_for(spec),
             )
             if resume and _already_measured(store, recipe.recipe_id):
                 report.resumed += 1
