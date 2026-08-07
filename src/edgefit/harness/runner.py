@@ -20,7 +20,7 @@ import json
 import signal
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 from edgefit import HARNESS_VERSION
@@ -229,16 +229,13 @@ def _measure_in_subprocess(
             "decode_tokens": policy.decode_tokens,
         }
     )
-    return DeviceRun(
-        samples_ms=payload.get("samples_ms") or [],
-        peak_rss_bytes=payload.get("peak_rss_bytes"),
-        warmup_count=payload.get("warmup_count", 0),
-        outputs=payload.get("outputs"),
-        failure_reason=payload.get("failure_reason"),
-        ttft_samples_ms=payload.get("ttft_samples_ms") or [],
-        decode_samples_tok_s=payload.get("decode_samples_tok_s") or [],
-        generated_tokens=payload.get("generated_tokens"),
-    )
+    # Rebuilt from the dataclass's own fields rather than a hand-written list. The
+    # worker already serialises with `asdict`, so listing them here made the boundary
+    # asymmetric — and a field added to DeviceRun was silently dropped in transit.
+    # That is exactly what happened to the cold-load metrics: measured correctly in
+    # the child, absent from every local row, with nothing failing to say so.
+    known = {f.name for f in fields(DeviceRun)}
+    return DeviceRun(**{k: v for k, v in payload.items() if k in known and v is not None})
 
 
 def _failure_record(

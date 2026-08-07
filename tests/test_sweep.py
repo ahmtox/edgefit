@@ -140,3 +140,43 @@ class TestRunSweep:
             "SELECT outcome, failure_reason FROM measurements"
         ).fetchone()
         assert row == ("lowering_failure", "blockwise int4 is not implemented")
+
+
+def test_device_run_survives_the_process_boundary_intact() -> None:
+    """Every DeviceRun field must cross the worker boundary, not just the listed ones.
+
+    The worker serialises with `asdict`, but the parent used to rebuild DeviceRun from
+    a hand-written field list. The two drifted the moment a field was added: cold-load
+    timings were measured correctly inside the child and silently dropped in transit,
+    so 48 local rows recorded null for a metric the backend had just produced. Nothing
+    failed — the number simply never arrived.
+
+    This asserts the boundary is lossless for *all* fields, so adding one cannot
+    quietly go missing again.
+    """
+    from dataclasses import asdict, fields
+
+    from edgefit.backends.base import DeviceRun
+    from edgefit.harness import runner
+
+    original = DeviceRun(
+        samples_ms=[1.0, 2.0],
+        peak_rss_bytes=123,
+        warmup_count=3,
+        cold_load_ms=456.7,
+        warm_load_ms=89.1,
+        first_inference_ms=234.5,
+        ttft_samples_ms=[5.0],
+        decode_samples_tok_s=[6.0],
+    )
+    payload = asdict(original)
+
+    known = {f.name for f in fields(DeviceRun)}
+    assert set(payload) == known, "asdict and the dataclass disagree"
+
+    rebuilt = DeviceRun(**{k: v for k, v in payload.items() if k in known and v is not None})
+    for field in fields(DeviceRun):
+        assert getattr(rebuilt, field.name) == getattr(original, field.name), (
+            f"{field.name} did not survive the round trip"
+        )
+    assert runner is not None

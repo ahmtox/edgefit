@@ -32,6 +32,9 @@ except _md.PackageNotFoundError:  # running from a source tree without an instal
 # 0.3.6: EXPORTER_VERSION 4 → 5 (frozen-token text export).
 # 0.3.7: cold/warm load and first-inference are measured and recorded. New metrics
 # mean a new corpus shape, and rows without them are not comparable to rows with.
-HARNESS_VERSION = "0.3.7"
+# 0.3.8: 0.3.7 measured cold-load in the worker and dropped it crossing the process
+# boundary, so its local rows carry null for a metric that was taken. They are not
+# comparable to rows that have it, which is what a version bump is for.
+HARNESS_VERSION = "0.3.8"
 
 __all__ = ["__version__", "HARNESS_VERSION"]
