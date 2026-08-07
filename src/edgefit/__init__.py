@@ -35,6 +35,9 @@ except _md.PackageNotFoundError:  # running from a source tree without an instal
 # 0.3.8: 0.3.7 measured cold-load in the worker and dropped it crossing the process
 # boundary, so its local rows carry null for a metric that was taken. They are not
 # comparable to rows that have it, which is what a version bump is for.
-HARNESS_VERSION = "0.3.8"
+# 0.3.9: 0.3.7/0.3.8 held two ORT sessions at once to time a warm reload, which
+# inflated peak_rss_bytes by ~91% of a session — a new metric silently corrupting
+# an existing one. Those rows overstate memory and are not comparable.
+HARNESS_VERSION = "0.3.9"
 
 __all__ = ["__version__", "HARNESS_VERSION"]

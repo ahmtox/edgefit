@@ -19,6 +19,7 @@ The distinction is recorded on every fallback report rather than left implicit.
 from __future__ import annotations
 
 import contextlib
+import gc
 import glob
 import os
 import tempfile
@@ -296,19 +297,6 @@ class OrtBackend:
         except Exception as exc:  # noqa: BLE001
             return DeviceRun(failure_reason=f"session creation failed: {exc}")
 
-        # Warm load: the same work with the runtime's caches populated. The gap
-        # between the two is what a delegate compiles ahead of time and then reuses,
-        # which is why it is worth reporting separately rather than averaging.
-        warm_load_ms: float | None = None
-        try:
-            warm_started = time.perf_counter_ns()
-            self._create_session(
-                model_path, recipe, opt_level=recipe.runtime.graph_optimization_level
-            )
-            warm_load_ms = (time.perf_counter_ns() - warm_started) / 1e6
-        except Exception:  # noqa: BLE001 - a warm reload failing is not a measurement failure
-            warm_load_ms = None
-
         first_inference_ms: float | None = None
         try:
             # Warmup runs stay out of the steady-state distribution (§5.6) because
@@ -331,9 +319,34 @@ class OrtBackend:
             return DeviceRun(failure_reason=f"inference failed: {exc}", warmup_count=warmup)
 
         output_names = [o.name for o in session.get_outputs()]
+
+        # Peak RSS is read *here*, before anything else allocates. It is a high-water
+        # mark over the whole process, so any later work can only inflate it — and the
+        # warm reload below did exactly that in 0.3.7/0.3.8: holding a second session
+        # alongside the first added 91% of a session's memory to the mark, roughly
+        # doubling a headline column. Snapshotting first makes that impossible rather
+        # than merely unlikely.
+        peak_bytes = peak_rss_bytes()
+
+        # Warm reload, last and alone: the first session is released so the two are
+        # never resident together. The gap against the cold load is what the delegate
+        # compiled once and can reuse.
+        warm_load_ms: float | None = None
+        try:
+            del session
+            gc.collect()
+            warm_started = time.perf_counter_ns()
+            reloaded = self._create_session(
+                model_path, recipe, opt_level=recipe.runtime.graph_optimization_level
+            )
+            warm_load_ms = (time.perf_counter_ns() - warm_started) / 1e6
+            del reloaded
+        except Exception:  # noqa: BLE001 - a warm reload failing is not a measurement failure
+            warm_load_ms = None
+
         return DeviceRun(
             samples_ms=samples_ms,
-            peak_rss_bytes=peak_rss_bytes(),
+            peak_rss_bytes=peak_bytes,
             warmup_count=warmup,
             cold_load_ms=cold_load_ms,
             warm_load_ms=warm_load_ms,
