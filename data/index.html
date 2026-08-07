@@ -148,11 +148,11 @@ Every number reproducible; every failure recorded.</p></header>
 <p>The whole corpus, in full, free. Downloading it and disagreeing with us is the
 point — a benchmark nobody can check is a benchmark nobody should trust.</p>
 <div class="scroll"><table><thead><tr><th>File</th><th class="num">Size</th></tr></thead>
-<tbody><tr><td><a href='graph_fingerprints.csv'>graph_fingerprints.csv</a></td><td class='num'>28.1 KiB</td></tr><tr><td><a href='measurements.csv'>measurements.csv</a></td><td class='num'>432.1 KiB</td></tr><tr><td><a href='recipes.csv'>recipes.csv</a></td><td class='num'>92.5 KiB</td></tr></tbody></table></div>
+<tbody><tr><td><a href='graph_fingerprints.csv'>graph_fingerprints.csv</a></td><td class='num'>28.1 KiB</td></tr><tr><td><a href='measurements.csv'>measurements.csv</a></td><td class='num'>549.4 KiB</td></tr><tr><td><a href='recipes.csv'>recipes.csv</a></td><td class='num'>110.6 KiB</td></tr></tbody></table></div>
 
 <h3>What is in it</h3>
 <ul>
-<li><strong>measurements</strong> — one row per observation, 110 of them,
+<li><strong>measurements</strong> — one row per observation, 135 of them,
     including the 22 that failed. Carries the full record as canonical
     JSON in <span class="mono">payload</span> alongside denormalised columns.</li>
 <li><strong>recipes</strong> — every configuration measured, content-addressed by
@@ -181,8 +181,8 @@ duckdb.sql("SELECT * FROM 'measurements.parquet' WHERE outcome = 'success'").sho
 </ul>
 
 <footer class="site">
-edgefit 0.0.1 · harness 0.3.5 ·
-generated 2026-08-05 23:11 EDT<br>
+edgefit 0.0.1 · harness 0.3.6 ·
+generated 2026-08-07 00:43 EDT<br>
 Corpus is append-only and immutable: a re-measurement is a new row, never an edit.
 </footer>
 </div>
