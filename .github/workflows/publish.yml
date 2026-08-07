@@ -1,0 +1,41 @@
+# Publish to PyPI on a version tag, via Trusted Publishing.
+#
+# No API token anywhere — PyPI verifies the workflow's OIDC identity instead. That
+# matters here specifically: a long-lived token in repo secrets is one bad log line
+# from being public, and this project already had to scrub a vendor token before its
+# first push.
+#
+# One-time setup on PyPI (Account → Publishing → Add a pending publisher):
+#   project: edgefit · owner: ahmtox · repo: edgefit
+#   workflow: publish.yml · environment: pypi
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group dev
+      # The gate runs before anything ships. A release that fails its own fast suite
+      # is not a release.
+      - run: uv run pytest -q
+      - run: uv run ruff check .
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist/ }
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write        # required for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist/ }
+      - uses: pypa/gh-action-pypi-publish@release/v1

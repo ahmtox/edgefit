@@ -1,9 +1,27 @@
 [project]
 name = "edgefit"
 version = "0.0.1"
-description = "Deployment compiler for on-device AI — measurement harness"
+description = "Neutral, reproducible measurement of on-device AI inference, across silicon vendors"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Alan Morelos" }]
+keywords = [
+    "on-device", "edge-ai", "inference", "benchmark", "onnxruntime",
+    "coreml", "qualcomm", "npu", "quantization", "latency",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Benchmark",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+]
 
 # Runtime path only. Anything needed purely to *produce* a model artifact belongs
 # in the `export` extra — the Tier-3 self-hosted runner (PROJECT.md §8) ships this
@@ -28,6 +46,12 @@ dependencies = [
     # Unprivileged thermal state + low-power-mode via NSProcessInfo. macOS only.
     "pyobjc-framework-Cocoa>=10; sys_platform == 'darwin'",
 ]
+
+[project.urls]
+Homepage = "https://ahmtox.github.io/edgefit"
+Atlas = "https://ahmtox.github.io/edgefit"
+Source = "https://github.com/ahmtox/edgefit"
+Issues = "https://github.com/ahmtox/edgefit/issues"
 
 [project.optional-dependencies]
 # Model ingestion / lowering. Not required to replay a measurement.

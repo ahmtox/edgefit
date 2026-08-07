@@ -31,3 +31,4 @@ __pycache__/
 
 # Internal planning and strategy. Not published.
 /internal/
+dist/
