@@ -41,40 +41,48 @@ Model: `google/vit-base-patch16-224-in21k`, fp32 ONNX, batch 1, 224×224. The ot
 models — two vision, three text, all of them transformers — reproduce the split
 device-for-device.
 
-### It is not purely a property of the device — but it is not architecture either
+### It is the device — and one apparent exception taught us more than the rule
 
-We put **MobileNetV2** through the same protocol, a CNN built for mobile, and it broke the
-pattern: the Pixel 9 that declined every node of all five transformers accelerated it
-completely. So we wrote that the split was **device × architecture**.
+An earlier version of this post claimed the split was **device × architecture**, on the
+strength of one result: **MobileNetV2**, a CNN built for mobile, appeared to be accelerated
+by the same Pixel 9 that declined every node of five transformers. Then a second CNN,
+ResNet-50, fell back on that Pixel exactly as the transformers did, so architecture family
+plainly was not the answer either. MobileNetV2 was left as a lone exception.
 
-Then we ran a second CNN.
+It was not an exception. It was a **confound of our own making**, and finding it is the
+most useful thing in this post.
 
-| model | family | Pixel 9 | placement |
+MobileNetV2's accelerated result came from an artifact **compiled to TFLite**. Every model
+it was compared against was profiled as **raw ONNX**. Two different paths onto the device,
+presented as one comparison. The control settles it:
+
+| model | path | Pixel 9 p50 | placement |
 |---|---|---:|---|
-| ViT-base | transformer | 306.09 ms | CPU 544/544 |
-| **MobileNetV2** | CNN | **4.71 ms** | **GPU 65/65** |
-| **ResNet-50** | CNN | **78.22 ms** | **CPU 57/57** |
+| MobileNetV2 | raw ONNX | 8.25 ms *(cv 9.5%)* | **CPU 55/55** |
+| MobileNetV2 | **TFLite** | **4.71 ms** *(cv 29.2%)* | **GPU 65/65** |
+| ViT-base | raw ONNX | 306.09 ms *(cv 9.0%)* | CPU 544/544 |
+| ViT-base | TFLite | 306.09 ms *(cv 9.0%)* | CPU 544/544 |
 
-**Two CNNs, opposite outcomes.** ResNet-50 falls back on the Pixel 9, the Pixel 10 and
-the Galaxy A14 exactly as the transformers do. So "CNNs reach the accelerator and
-transformers don't" is false.
+So the device-level rule holds without exception after all. Across **29 devices and ten
+models on the raw-ONNX path, not one device is mixed**: every device accelerates every
+model it is given, or runs every model entirely on the CPU. Model identity predicts
+nothing. The Pixel 9 declines all ten.
 
-We have since measured more models on that Pixel 9, and the count is now stark:
+But the MobileNetV2 row is not noise to be discarded — it is the single most important
+measurement here, because it proves **the Pixel 9's accelerator was reachable the whole
+time.** The silicon was never the limit. The *path* was. Change the artifact format and the
+same model on the same phone moves off the CPU and gets 1.75× faster.
 
-| accelerated | fell back entirely |
-|---|---|
-| MobileNetV2 | ViT-base · CLIP-ViT · DeiT-Small · all-MiniLM-L6-v2 · bart-base · toxic-comment · ResNet-50 · ConvNeXt-Tiny · EfficientNet-B0 |
+That reframes the 100% figure sharply, and we would rather say it plainly than keep a
+better headline: **what we measured on those devices is how far one toolchain reaches, not
+what the hardware can do.** See [what this does not say](#what-this-does-not-say) — it
+matters enough that it is not a footnote.
 
-**Nine models fall back. One does not.** MobileNetV2 is not representative of CNNs, or of
-anything — it looks like the model the delegate was tuned against, which is a different
-and less comfortable claim than "CNNs work".
-
-This is the second generalisation about this data we have had to withdraw. The first
-claimed the split was purely the SoC; five transformers supported it and one CNN killed
-it. The second claimed architecture family explained the rest; one more CNN killed that
-too. What is left is narrower and less quotable: **it is the specific model on the
-specific device, and you cannot predict it from the datasheet, the vendor, the generation,
-or the architecture family.**
+Two claims about this data have now been withdrawn: that architecture family explained the
+split, and that MobileNetV2 was a specially-supported model. The second was our error
+rather than a generalisation outrunning its evidence — the control belonged *before*
+publication, not after. It was catchable only because every row records how it was
+produced, which is worth more than any single number on this page.
 
 Which is, uncomfortably, the entire reason a project like this has to exist.
 
@@ -167,7 +175,28 @@ you do not control.
 
 Being precise here matters more than the headline, so:
 
-**This is not evidence that Tensor or Exynos NPUs are slow.** These are **fp32**
+**This measures one toolchain's reach, not the hardware's ceiling — and on non-Qualcomm
+silicon that distinction is the whole story.** Every measurement here was taken through
+**Qualcomm AI Hub**, on Qualcomm's hosted devices, using Qualcomm's compiler. That stack
+has no path to Google's or Samsung's NPU, so a Tensor or Exynos device running 100% on the
+CPU is **expected behaviour, not a defect of that device.** We are not neutral observers of
+those parts and we will not pretend otherwise: reporting that number as a property of the
+Pixel would be exactly the vendor-flavoured comparison this project exists to avoid.
+
+The MobileNetV2 result above is the proof, and it cost us a retraction to find: on the same
+Pixel 9, the TFLite path reaches the GPU where the ONNX path does not. **The accelerator
+was always there.**
+
+What the Tensor and Exynos rows *do* honestly tell you is a deployment fact, and a useful
+one: if you ship an fp32 ONNX artifact through this toolchain, those devices run it on the
+CPU, and nothing warns you. That is true, actionable, and reproducible. It is a statement
+about your pipeline, not about their silicon. **A fair test of a Tensor NPU needs LiteRT or
+Google's own stack, which we have not run.**
+
+The one comparison here that *is* neutral is the one inside Qualcomm's own fleet, where
+vendor is held constant — see the generational cliff below.
+
+**Nor is this evidence that fp32 is the natural input.** These are **fp32**
 artifacts. NPUs generally want int8 or fp16, and several of these accelerators may
 simply decline fp32 outright — which would be a completely reasonable thing for them to
 do. What we measured is not silicon quality. It is *what happens to a model you hand to
@@ -230,10 +259,20 @@ tidy explanations fail.
 input, where real calibration uses hundreds of representative examples — and a better set
 would plausibly move the transformer numbers.
 
-**Three SoCs accelerating is not a Qualcomm endorsement.** The three that worked are
-Snapdragon 8-series Gen 2 and newer. Three *other* Qualcomm parts in this table — sdm845,
-sm7250, sm8350 — fell back completely, same as the Tensor and Exynos devices. The line
-is generational, not by vendor.
+**The accelerating SoCs are not a Qualcomm endorsement — and this is the one clean
+comparison on the page.** Hold the vendor and the toolchain constant and the cliff is still
+there. Eight Qualcomm parts run every model entirely on the CPU:
+
+| Qualcomm SoC, every model on CPU | Qualcomm SoC, every model accelerated |
+|---|---|
+| Snapdragon 678 · 765G · 845 · 855 | Snapdragon 8 Gen 2 · 8 Gen 3 · 8 Elite |
+| Snapdragon 778G · 865+ · 7 Gen 4 | X Elite · X Plus · X2 Elite |
+| QCS6490 *(embedded)* | SA8295P · SA8775P *(automotive)* · QCS9075 |
+
+Same vendor, same compiler, same artifacts, same protocol — and a binary split with nothing
+in between. **The line is generational and tier-based, not by vendor**, and it lands between
+Snapdragon 865+/778G and 8 Gen 2. Because vendor and toolchain are held fixed on both sides,
+this is the comparison we would stand behind without the caveat above.
 
 ## The other half: an accelerator that makes things slower
 

@@ -27,13 +27,21 @@ boards and embedded vision kits.
 node on the CPU.** On ViT-base it is nine devices each way and the groups are **223×
 apart** — no error, no warning, correct results throughout.
 
-But it is **the specific model on the specific device**, and not predictable from
-architecture either. MobileNetV2 is accelerated on a Pixel 9 that declined all five
-transformers — and ResNet-50, also a CNN, falls back on it just as they do.
+It is the **device**, and only the device: across 29 devices and ten models, **not one
+device is mixed** — each accelerates everything it is given or runs everything on the CPU.
+Hold the vendor and toolchain constant and the cliff is still there: Snapdragon 678, 765G,
+845, 855, 778G, 865+, 7 Gen 4 and QCS6490 run every model on the CPU, while 8 Gen 2 and
+newer accelerate every one.
 
-On that Pixel 9 the count is now **nine models fall back, one does not** — MobileNetV2
-alone, which looks less like "CNNs work" and more like the model the delegate was tuned
-against.
+**Important caveat, and it is not a footnote:** every number here comes from Qualcomm AI
+Hub, so on Google Tensor and Exynos parts a 100% CPU result is *expected* — that stack has
+no path to a rival's NPU. It measures our pipeline's reach, not their silicon. The proof is
+that on the same Pixel 9, MobileNetV2 **compiled to TFLite** reaches the GPU (4.71 ms) where
+raw ONNX runs on the CPU (8.25 ms). The accelerator was always there.
+
+Finding that cost a retraction: MobileNetV2 had been the only model measured through the
+TFLite path, so an earlier version of this README read it as a specially-supported model.
+[The post](docs/silent-fallback.md) keeps the whole sequence rather than the tidied version.
 
 Quantization is equally unpredictable. Same device, same runtime, same int8 settings:
 ResNet-50 gets **2.26× faster**, ViT-base gets **8.35× slower**, MobileNetV2 does not
