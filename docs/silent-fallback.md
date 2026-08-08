@@ -208,15 +208,18 @@ result. ViT-base, every artifact built by AI Hub's own compiler:
 
 | device | fp32 | int8 **calibrated** | penalty |
 |---|---:|---:|---:|
-| Samsung Galaxy S24 — *accelerates fp32* | **6.73 ms** *(cv 0.6%)* | **56.17 ms** *(cv 0.4%)* | **8.4× worse** |
-| Google Pixel 9 — *falls back on fp32* | 306.09 ms *(cv 9.0%)* | **146.70 ms** *(cv 9.6%)* | **2.1× better** |
+| Samsung Galaxy S24 — *accelerates fp32* | **6.725 ms** *(cv 0.6%)* | **56.169 ms** *(cv 0.4%)* | **8.35× worse** |
+| Google Pixel 9 — *falls back on fp32* | 306.091 ms *(cv 9.0%)* | **146.696 ms** *(cv 9.6%)* | **2.09× better** |
 
-**On the S24, calibrated int8 is 8.4× slower. On the Pixel 9, it is 2.0× faster.** Same
+Both rows on each side are TFLite artifacts built by AI Hub's compiler, so the only thing
+varying is the precision.
+
+**On the S24, calibrated int8 is 8.35× slower. On the Pixel 9, it is 2.09× faster.** Same
 model, same compiler, same flags, opposite conclusions — decided entirely by whether the
 device's accelerator claimed the fp32 graph in the first place.
 
 "Quantize so it fits on the NPU" is the standard recommendation, and here quantizing
-*forfeited* the NPU advantage. The S24 kept all 921 nodes on its NPU and still lost 8.4×.
+*forfeited* the NPU advantage. The S24 kept all 921 nodes on its NPU and still lost 8.35×.
 The Pixel 9 never got off the CPU and still gained 2×.
 
 Node counts suggest why: 544 at fp32, 570 uncalibrated, **921** calibrated. Quantization
@@ -228,11 +231,11 @@ attribution, and we would rather not assert a mechanism we cannot show.
 
 **The practical consequence is that no single artifact is right for a mixed fleet:**
 
-| if you ship | S24 | Pixel 9 | worst case |
+| if you ship *(TFLite, both rows)* | S24 | Pixel 9 | worst case |
 |---|---:|---:|---:|
-| fp32 everywhere | 6.72 *(best)* | 291.10 | **2.0× penalty** |
-| calibrated int8 everywhere | 56.22 | 144.91 *(best)* | **8.4× penalty** |
-| the right one per device | 6.72 | 144.91 | — |
+| fp32 everywhere | **6.725** *(best)* | 306.091 | **2.09× penalty** |
+| calibrated int8 everywhere | 56.169 | **146.696** *(best)* | **8.35× penalty** |
+| the right one per device | 6.725 | 146.696 | — |
 
 If those two phones are each 20% of your users, there is no version of "just quantize it"
 that does not cost one of those groups badly.

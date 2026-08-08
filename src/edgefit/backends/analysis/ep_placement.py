@@ -32,6 +32,7 @@ from onnx import ModelProto
 
 from edgefit.backends.analysis.flops import FlopsTable
 from edgefit.schema.measurement import FallbackReport
+from edgefit.schema.vendor import provider_vendor
 
 _KERNEL_SUFFIX = "_kernel_time"
 
@@ -163,6 +164,7 @@ def build_fallback_report(
             else {}
         ),
         unclaimed_op_types=dict(unclaimed.most_common()),
+        toolchain_vendor=provider_vendor(intended_provider),
     )
 
 
@@ -229,4 +231,5 @@ def build_as_run_report(
         partition_count=len(fused) or None,
         node_basis="as_executed",
         analysis_graph_optimization=graph_optimization,
+        toolchain_vendor=provider_vendor(intended_provider),
     )

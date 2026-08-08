@@ -21,10 +21,14 @@ from typing import Any, Self
 import duckdb
 
 from edgefit.corpus.ddl import DDL
-from edgefit.schema.common import canonical_json, content_hash
+from edgefit.schema.common import MeasurementSource, canonical_json, content_hash
 from edgefit.schema.fingerprint import GraphFingerprint
-from edgefit.schema.measurement import MEASUREMENT_SCHEMA_VERSION, MeasurementRecord
+from edgefit.schema.measurement import (
+    MEASUREMENT_SCHEMA_VERSION,
+    MeasurementRecord,
+)
 from edgefit.schema.recipe import Recipe
+from edgefit.schema.vendor import provider_vendor, soc_vendor
 
 DEFAULT_CORPUS_PATH = Path("corpus/measurements.duckdb")
 
@@ -54,6 +58,53 @@ class DuplicateRecordError(Exception):
     so a duplicate insert is either a retry bug or a hash collision, and both
     deserve a stack trace.
     """
+
+
+def _vendor_columns(record: MeasurementRecord) -> dict[str, object]:
+    """Vendor attribution for the query columns, preferring the as-run report.
+
+    Rows measured before schema v7 carry no vendor fields, so those are **derived** from
+    the SoC string and execution provider already recorded on the same row. That is
+    deterministic re-reading of measured data, not synthesis: nothing here invents a
+    number, and hard rule #1 governs measurement values. The immutable ``payload`` is
+    left exactly as measured — per :func:`migrate`, the columns are a query convenience
+    and the payload is the record.
+
+    Deriving rather than backfilling matters because the alternative is worse in both
+    directions: leaving 374 existing rows as "vendor unknown" would make every one of
+    them non-diagnostic and silently drop the neutral Qualcomm-internal comparison, while
+    editing their payloads to add the fields would violate immutability for metadata that
+    was always recoverable from what they already say.
+    """
+    report = record.fallback_as_run or record.fallback
+    if report is None:
+        return {
+            "toolchain_vendor": None,
+            "device_soc_vendor": None,
+            "cross_vendor": None,
+            "fallback_is_diagnostic": False,
+        }
+
+    toolchain = report.toolchain_vendor
+    if toolchain is None:
+        if record.measurement_source is MeasurementSource.THIRD_PARTY:
+            # The only third-party path is Qualcomm AI Hub, which compiles and runs the
+            # artifact itself. Recorded on new rows; derived here for older ones.
+            toolchain = "qualcomm"
+        else:
+            toolchain = provider_vendor(report.intended_provider)
+
+    device = report.device_soc_vendor or soc_vendor(record.device.soc)
+
+    resolved = report.model_copy(
+        update={"toolchain_vendor": toolchain, "device_soc_vendor": device}
+    )
+    return {
+        "toolchain_vendor": resolved.toolchain_vendor,
+        "device_soc_vendor": resolved.device_soc_vendor,
+        "cross_vendor": resolved.cross_vendor,
+        "fallback_is_diagnostic": resolved.fallback_is_diagnostic,
+    }
 
 
 class CorpusStore:
@@ -254,6 +305,8 @@ class CorpusStore:
                 $token_agreement, $power_mw,
                 $fallback_node_pct, $fallback_flops_pct, $fallback_time_pct,
                 $as_run_node_pct, $as_run_time_pct, $as_run_partitions,
+                $toolchain_vendor, $device_soc_vendor, $cross_vendor,
+                $fallback_is_diagnostic,
                 $power_source, $low_power_mode, $thermal_state, $load_avg_1m,
                 $calibration_ratio, $notes, $payload
             )
@@ -309,6 +362,7 @@ class CorpusStore:
                 "as_run_node_pct": as_run.fallback_node_pct if as_run else None,
                 "as_run_time_pct": as_run.fallback_time_pct if as_run else None,
                 "as_run_partitions": as_run.partition_count if as_run else None,
+                **_vendor_columns(record),
                 "power_source": str(record.host_state.power_source),
                 "low_power_mode": record.host_state.low_power_mode,
                 "thermal_state": str(record.host_state.thermal_state),

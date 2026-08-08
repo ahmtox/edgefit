@@ -100,7 +100,25 @@ class Row:
     stress_profile: str
     measurement_source: str
     source_detail: str | None
+    cross_vendor: bool | None = None
+    fallback_is_diagnostic: bool = False
     recipe_path: str | None = None
+
+    @property
+    def fallback_caveat(self) -> str | None:
+        """Why this row's fallback figure must not be read as a partitioning verdict.
+
+        ``None`` when the figure stands on its own. Rendered next to every fallback
+        number rather than kept in a methodology page, because the post already made
+        the mistake of stating one without the other: a Qualcomm toolchain has no path
+        to a Google Tensor NPU, so 100% CPU there is expected rather than a defect.
+        """
+        if self.cross_vendor:
+            return (
+                "measured through a different vendor's toolchain than the SoC's — "
+                "CPU-only execution is expected here and is not a partitioning defect"
+            )
+        return None
 
     @property
     def ok(self) -> bool:
@@ -278,7 +296,8 @@ SELECT m.measurement_id, m.model_ref, r.task, coalesce(r.label, r.intended_provi
        m.fallback_flops_pct, m.fallback_node_pct, m.as_run_time_pct, m.as_run_partitions,
        m.thermal_state, m.power_source, m.calibration_ratio,
        m.harness_version, m.created_at, m.stress_profile,
-       m.measurement_source, m.source_detail
+       m.measurement_source, m.source_detail,
+       m.cross_vendor, m.fallback_is_diagnostic
 FROM measurements m LEFT JOIN recipes r USING (recipe_id)
 ORDER BY m.model_ref, m.latency_p50_ms NULLS LAST
 """
@@ -317,7 +336,7 @@ def load_rows(
             rss, artifact, lowering, cosine, cold_load, warm_load, first_inf,
             fb_flops, fb_node, as_run_time, as_run_parts,
             thermal, power, calib, harness, created, stress,
-            source, source_detail,
+            source, source_detail, cross_vendor, fb_diagnostic,
         ) = record
         if mid in skip:
             continue
@@ -370,6 +389,8 @@ def load_rows(
                 stress_profile=stress,
                 measurement_source=source,
                 source_detail=source_detail,
+                cross_vendor=cross_vendor,
+                fallback_is_diagnostic=bool(fb_diagnostic),
                 recipe_path=paths.get(label or ""),
             )
         )

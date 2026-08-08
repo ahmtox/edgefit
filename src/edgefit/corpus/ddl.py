@@ -104,6 +104,15 @@ CREATE TABLE IF NOT EXISTS measurements (
     as_run_time_pct       DOUBLE,
     as_run_partitions     INTEGER,
 
+    -- Whose toolchain measured whose silicon. Promoted to columns because a fallback
+    -- percentage must never be selected without them: on a rival's SoC a 100% figure is
+    -- expected behaviour, not a partitioning defect, and we published it as the latter
+    -- once. `fallback_is_diagnostic` is the only safe filter for the strong reading.
+    toolchain_vendor      VARCHAR,
+    device_soc_vendor     VARCHAR,
+    cross_vendor          BOOLEAN,
+    fallback_is_diagnostic BOOLEAN,
+
     power_source          VARCHAR NOT NULL,
     low_power_mode        BOOLEAN,
     thermal_state         VARCHAR NOT NULL,

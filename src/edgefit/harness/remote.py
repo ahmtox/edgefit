@@ -59,6 +59,7 @@ from edgefit.schema.recipe import (
     QaiHubRuntimeConfig,
     Recipe,
 )
+from edgefit.schema.vendor import soc_vendor as _soc_vendor
 
 #: Leading samples discarded before aggregation.
 #:
@@ -483,6 +484,14 @@ def _on_intended(per_unit: dict[str, float], intended: str) -> float:
     return per_unit.get(intended, 0)
 
 
+#: The toolchain doing the compiling and running on this path. Not inferred — it is
+#: simply which service we submitted to.
+TOOLCHAIN_VENDOR = "qualcomm"
+
+#: Re-exported so the hosted path reads in one place. Lives in the schema package
+#: because the local ORT path needs the same answer for the host's own SoC.
+soc_vendor = _soc_vendor
+
 def remote_fallback_report(profile: RemoteProfile, intended: str) -> FallbackReport | None:
     """Per-node compute-unit placement, as the vendor measured it.
 
@@ -516,6 +525,8 @@ def remote_fallback_report(profile: RemoteProfile, intended: str) -> FallbackRep
         nodes_per_provider=dict(profile.nodes_per_unit),
         node_basis="as_executed",
         analysis_graph_optimization=f"qai_hub compiled ({unit_names})",
+        toolchain_vendor=TOOLCHAIN_VENDOR,
+        device_soc_vendor=soc_vendor(remote_device_fingerprint(profile).soc),
     )
 
 

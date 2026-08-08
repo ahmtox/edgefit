@@ -99,6 +99,9 @@ tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--plane); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .dim { color: var(--muted); }
+/* Cross-vendor marker: this fallback figure was measured through a toolchain that
+   cannot reach the SoC's own accelerator, so it is not a partitioning verdict. */
+.xv { color: var(--muted); cursor: help; font-size: 0.85em; }
 .win { color: var(--good-text); font-weight: 600; }
 .lose { color: var(--critical); font-weight: 600; }
 

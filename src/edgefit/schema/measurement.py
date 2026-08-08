@@ -30,7 +30,12 @@ from edgefit.schema.host import DeviceFingerprint, HostState
 # v5 adds measurement_source, so a third party's reported figure can enter the
 # corpus without impersonating one of our own measurements.
 # v6 adds token_agreement, the generative analogue of the numerics check.
-MEASUREMENT_SCHEMA_VERSION = 6
+# v7 adds toolchain_vendor and device_soc_vendor to FallbackReport. A fallback
+#    percentage means two different things depending on whether a rival's silicon was
+#    measured with this vendor's toolchain, and we published the wrong one once: a
+#    Qualcomm-hosted 100% CPU result on a Google Tensor part is expected behaviour, not
+#    a partitioning defect. Promoted from remembered caveat to recorded field.
+MEASUREMENT_SCHEMA_VERSION = 7
 
 # PROJECT.md §14.2. Not a suggestion, and not configurable downwards.
 MIN_RUNS = 5
@@ -179,6 +184,50 @@ class FallbackReport(_Frozen):
         ),
     )
     flops_estimator_version: int | None = None
+
+    # Whose toolchain measured whose silicon. Recorded because a fallback percentage
+    # means two completely different things depending on the answer, and we got this
+    # wrong in public once.
+    toolchain_vendor: str | None = Field(
+        default=None,
+        description="Vendor of the stack that compiled and ran the artifact, e.g. 'qualcomm'.",
+    )
+    device_soc_vendor: str | None = Field(
+        default=None,
+        description="Vendor of the SoC measured on, e.g. 'google' for a Tensor part.",
+    )
+
+    @property
+    def cross_vendor(self) -> bool | None:
+        """Was a rival's silicon measured with this vendor's toolchain?
+
+        ``None`` when either vendor is unrecorded — absence of evidence, not a claim.
+
+        This qualifies :attr:`fallback_node_pct` so severely that the two must never be
+        read apart. A Qualcomm toolchain has no code path to a Google Tensor NPU, so
+        100% CPU on a Pixel is **expected behaviour, not a partitioning defect**. We
+        published that number as a property of the device before recording this, which
+        blamed a rival's hardware for the reach of our own pipeline — the specific
+        vendor-flavoured comparison PROJECT.md §12 says the business cannot make.
+
+        The measurement is still true and still useful: it is what happens to an
+        artifact shipped through that toolchain. It is a statement about the pipeline,
+        not the silicon, and only :attr:`fallback_is_diagnostic` rows support the
+        stronger reading.
+        """
+        if self.toolchain_vendor is None or self.device_soc_vendor is None:
+            return None
+        return self.toolchain_vendor.lower() != self.device_soc_vendor.lower()
+
+    @property
+    def fallback_is_diagnostic(self) -> bool:
+        """Does this row's fallback figure indict the *partition* rather than the path?
+
+        True only when vendor is held constant, so a fallback figure has nowhere else to
+        come from. Conservative by design: an unrecorded vendor reads False, because a
+        neutrality claim should have to be earned by evidence rather than by a gap in it.
+        """
+        return self.cross_vendor is False
 
     @model_validator(mode="after")
     def _check_coherent(self) -> FallbackReport:

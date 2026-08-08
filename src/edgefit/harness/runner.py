@@ -42,6 +42,7 @@ from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.host import DeviceFingerprint
 from edgefit.schema.measurement import FallbackReport, MeasurementRecord, Metrics, Outcome
 from edgefit.schema.recipe import Recipe
+from edgefit.schema.vendor import soc_vendor
 
 _WORKER_TIMEOUT_S = 900.0
 _SIGNALS = {member.value for member in signal.Signals}
@@ -281,9 +282,28 @@ def _failure_record(
         run_count=0,
         warmup_count=warmup,
         metrics=metrics,
-        fallback=analysis.fallback if analysis else None,
-        fallback_as_run=analysis.fallback_as_run if analysis else None,
+        fallback=_with_device_vendor(analysis.fallback if analysis else None, device),
+        fallback_as_run=_with_device_vendor(
+            analysis.fallback_as_run if analysis else None, device
+        ),
     )
+
+
+def _with_device_vendor(
+    report: FallbackReport | None, device: DeviceFingerprint
+) -> FallbackReport | None:
+    """Stamp whose silicon this was, so ``cross_vendor`` can be computed later.
+
+    The EP names the toolchain's vendor; only the caller knows the device's. Applied
+    here rather than inside the analysis so there is exactly one place that decides it.
+
+    CoreML on Apple silicon is the case this preserves: vendor held constant, so those
+    fallback figures keep the strong reading — the partitioner really did decline the
+    ops. The hosted Qualcomm-on-Tensor rows are the case it flags.
+    """
+    if report is None:
+        return None
+    return report.model_copy(update={"device_soc_vendor": soc_vendor(device.soc)})
 
 
 def measure(
@@ -427,8 +447,8 @@ def measure(
                 ),
                 unavailable=_unavailable_on_this_host(generative=generative),
             ),
-            fallback=analysis.fallback,
-            fallback_as_run=analysis.fallback_as_run,
+            fallback=_with_device_vendor(analysis.fallback, device),
+            fallback_as_run=_with_device_vendor(analysis.fallback_as_run, device),
             notes=notes,
         )
 

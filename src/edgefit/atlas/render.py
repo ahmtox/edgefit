@@ -24,6 +24,7 @@ from edgefit import HARNESS_VERSION, __version__
 from edgefit.atlas import charts
 from edgefit.atlas.assets import CSS, JS
 from edgefit.atlas.query import Device, Model, Row, Summary, group_median
+from edgefit.schema.vendor import soc_vendor
 
 _NAV = (
     ("", "The matrix"),
@@ -239,8 +240,27 @@ def _matrix_row(row: Row, *, depth: int) -> str:
         + _cell(row.peak_rss_mib, 0)
         + _cell(row.first_inference_ms or row.cold_load_ms, 0)
         + _cell(row.cosine, 4)
-        + _cell(row.fb_time_as_run, 1, "%")
+        + _fallback_cell(row)
         + "</tr>"
+    )
+
+
+def _fallback_cell(row: Row) -> str:
+    """A fallback percentage, marked when it cannot be read as a partitioning verdict.
+
+    The mark is not decoration. Every hosted row is measured through Qualcomm AI Hub,
+    which has no code path to a Google or Samsung NPU, so 100% CPU on those parts is
+    expected behaviour. We published that figure as a property of the device once, and
+    the number on this page is the same number — so the qualifier travels with it here
+    rather than living in a methodology footnote nobody clicks.
+    """
+    cell = _cell(row.fb_time_as_run, 1, "%")
+    caveat = row.fallback_caveat
+    if caveat is None or row.fb_time_as_run is None:
+        return cell
+    return cell.replace(
+        "</td>",
+        f' <span class="xv" title="{escape(caveat)}">✻</span></td>',
     )
 
 
@@ -373,7 +393,7 @@ def _headline_findings(models: list[Model]) -> str:
                 + _cell(accel.p50_ms)
                 + f"<td class='num'>{verdict}</td>"
                 + _cell(accel.fb_flops_authored, 1, "%")
-                + _cell(accel.fb_time_as_run, 1, "%")
+                + _fallback_cell(accel)
                 + "</tr>",
             ))
     # Biggest win first: the point of the table is which delegates earn their keep.
@@ -575,7 +595,7 @@ def model_page(model: Model, depth: int = 1) -> str:
                 else _cell(row.cosine, 4)
             )
             + _cell(row.fb_flops_authored, 1, "%")
-            + _cell(row.fb_time_as_run, 1, "%")
+            + _fallback_cell(row)
             + _cell(None if row.as_run_partitions is None else float(row.as_run_partitions), 0)
             + "</tr>"
         )
@@ -648,6 +668,37 @@ def models_index(models: list[Model], depth: int = 1) -> str:
     return page("Models", "".join(body), depth=depth, here="models/")
 
 
+def _cross_vendor_note(device: Device) -> str:
+    """Say why every row on this device ran on the CPU, where it cannot be missed.
+
+    On a Google Tensor or Samsung Exynos page the chart above is a wall of "CPU", and
+    without this the obvious reading is that the device's NPU declined the work. It did
+    not: every measurement here goes through Qualcomm AI Hub, which has no code path to
+    a rival's accelerator. We published the wrong reading of exactly this number once,
+    so the correction lives on the page that shows it rather than in a methodology link.
+    """
+    flagged = [row for row in device.rows if row.cross_vendor]
+    if not flagged:
+        return ""
+    scope = (
+        "Every measurement" if len(flagged) == len(device.rows) else f"{len(flagged)} measurements"
+    )
+    return (
+        '<div class="card"><p><strong>Read the placement on this page carefully.</strong> '
+        f"{scope} here was taken through <strong>Qualcomm AI Hub</strong> — Qualcomm's "
+        f"hosted devices and Qualcomm's compiler — while this device's SoC "
+        f"(<span class='mono'>{escape(device.soc)}</span>) is made by "
+        f"<strong>{escape(soc_vendor(device.soc) or 'another vendor')}</strong>. "
+        "That stack has no path to a non-Qualcomm NPU, so work landing on the "
+        "CPU here is <em>expected behaviour and not a defect of this device</em>.</p>"
+        "<p>It is still a real deployment fact: ship an artifact through that toolchain "
+        "and this is what you get, with no warning. But it measures our pipeline's reach, "
+        "not this silicon's ceiling — on a Pixel 9 a TFLite artifact did reach the GPU "
+        "where an ONNX one did not. A fair test of this NPU needs its own vendor's stack, "
+        "which we have not run.</p></div>"
+    )
+
+
 def device_page(device: Device, depth: int = 1) -> str:
     successes = [row for row in device.rows if row.ok and row.p50_ms is not None]
     bars = [
@@ -678,6 +729,7 @@ def device_page(device: Device, depth: int = 1) -> str:
         f'<p class="dim">The OS build is part of this device\'s identity. An OS update '
         f"changes delegate behaviour, so the same machine on a new build is a new "
         f"measurement target.</p></div>",
+        _cross_vendor_note(device),
         "<h3>What runs here</h3>",
         "<figure>",
         charts.horizontal_bars(bars, unit="p50 latency, ms", series_names=("CPU", "accelerator")),
