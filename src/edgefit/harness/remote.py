@@ -50,6 +50,7 @@ from edgefit.schema.common import (
     StressProfile,
     ThermalState,
 )
+from edgefit.schema.fingerprint import GraphFingerprint
 from edgefit.schema.host import DeviceFingerprint, HostState
 from edgefit.schema.measurement import FallbackReport, MeasurementRecord, Metrics, RunStats
 from edgefit.schema.recipe import (
@@ -638,6 +639,31 @@ def failure_record(
     )
 
 
+def graph_fingerprint(artifact_dir: Path) -> GraphFingerprint | None:
+    """Fingerprint the artifact about to be uploaded.
+
+    Hosted rows carried no fingerprint at all — 120 of them — because the field was
+    threaded through the record and nothing ever populated it. §5.2 calls the
+    fingerprint the key a cost model indexes on, so a corpus whose every cross-vendor
+    row lacks one cannot answer the question those rows exist to raise: *does the graph
+    predict whether a delegate claims it?* Nine models fall back on a Pixel 9 and one
+    does not, and the graphs were not recorded beside the outcomes.
+
+    Fingerprinted from the ONNX we submit, not from whatever AI Hub compiles it into:
+    that is the object we can inspect, and the one a user would hand to any other
+    runtime.
+    """
+    from edgefit.backends.analysis.graph import fingerprint_onnx  # noqa: PLC0415
+
+    model_path = artifact_dir / "model.onnx"
+    try:
+        import onnx  # noqa: PLC0415
+
+        return fingerprint_onnx(onnx.load(str(model_path), load_external_data=False))
+    except Exception:  # noqa: BLE001 - a gap in the corpus beats a wasted provisioning
+        return None
+
+
 def measure_remote(
     recipe: Recipe,
     artifact_dir: Path,
@@ -650,6 +676,10 @@ def measure_remote(
     A job that runs and fails produces a ``runtime_failure`` row carrying the
     vendor's message, rather than an exception the caller has to interpret.
     """
+    fingerprint = graph_fingerprint(artifact_dir) if fingerprint_id is None else None
+    if fingerprint is not None:
+        fingerprint_id = fingerprint.fingerprint_id
+
     try:
         profile = submit_profile(recipe, artifact_dir)
     except RemoteJobFailed as failure:
@@ -659,6 +689,8 @@ def measure_remote(
 
     if store is not None:
         store.insert_recipe(recipe)
+        if fingerprint is not None:
+            store.insert_fingerprint(fingerprint)
         store.insert_measurement(record)
     return record
 
