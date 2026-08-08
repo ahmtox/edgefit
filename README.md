@@ -27,8 +27,13 @@ boards and embedded vision kits.
 node on the CPU.** On ViT-base it is nine devices each way and the groups are **223×
 apart** — no error, no warning, correct results throughout.
 
-But it is **device × architecture**, not device alone: a sixth model, MobileNetV2, is
-accelerated on a Pixel 9 that declined every node of all five transformers.
+But it is **the specific model on the specific device**, and not predictable from
+architecture either. MobileNetV2 is accelerated on a Pixel 9 that declined all five
+transformers — and ResNet-50, also a CNN, falls back on it just as they do.
+
+Quantization is equally unpredictable. Same device, same runtime, same int8 settings:
+ResNet-50 gets **2.26× faster**, ViT-base gets **8.35× slower**, MobileNetV2 does not
+measurably change. A 19× spread decided by which model you brought.
 
 The line is not recency (Tensor G5 in the Pixel 10 falls back, like G2–G4 before it),
 not vendor (six Qualcomm parts fall back too), and not form factor. Laptop against

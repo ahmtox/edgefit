@@ -41,25 +41,34 @@ Model: `google/vit-base-patch16-224-in21k`, fp32 ONNX, batch 1, 224×224. The ot
 models — two vision, three text, all of them transformers — reproduce the split
 device-for-device.
 
-### It is not purely a property of the device
+### It is not purely a property of the device — but it is not architecture either
 
-We later put **MobileNetV2**, a convolutional network built for mobile, through the same
-protocol. It breaks the pattern:
+We put **MobileNetV2** through the same protocol, a CNN built for mobile, and it broke the
+pattern: the Pixel 9 that declined every node of all five transformers accelerated it
+completely. So we wrote that the split was **device × architecture**.
 
-| model | Pixel 9 | placement |
-|---|---:|---|
-| ViT-base *(transformer)* | 291.10 ms | **CPU 544 of 544** |
-| MobileNetV2 *(CNN)* | **5.01 ms** | **GPU 65 of 65** |
+Then we ran a second CNN.
 
-The same Pixel 9 that declined every node of every transformer accelerates a CNN
-completely. So the honest statement is **device × architecture**, not device alone: these
-devices reject *these transformer graphs*, and a convolutional model reaches the
-accelerator on hardware that refused all five.
+| model | family | Pixel 9 | placement |
+|---|---|---:|---|
+| ViT-base | transformer | 306.09 ms | CPU 544/544 |
+| **MobileNetV2** | CNN | **4.71 ms** | **GPU 65/65** |
+| **ResNet-50** | CNN | **78.22 ms** | **CPU 57/57** |
 
-This corrects an earlier version of this post, which said the split was "entirely about
-the SoC". It was — across the five models measured at the time, every one of which was a
-transformer. Adding a single CNN falsified the generalisation, which is about what should
-happen to a generalisation drawn from one architecture family.
+**Two CNNs, opposite outcomes.** ResNet-50 falls back on the Pixel 9, the Pixel 10 and
+the Galaxy A14 exactly as the transformers do. So "CNNs reach the accelerator and
+transformers don't" is false, and MobileNetV2 is the exception rather than the rule —
+plausibly because it is *the* canonical mobile network, the one every delegate's supported
+op set is built around.
+
+This is the second generalisation about this data we have had to withdraw. The first
+claimed the split was purely the SoC; five transformers supported it and one CNN killed
+it. The second claimed architecture family explained the rest; one more CNN killed that
+too. What is left is narrower and less quotable: **it is the specific model on the
+specific device, and you cannot predict it from the datasheet, the vendor, the generation,
+or the architecture family.**
+
+Which is, uncomfortably, the entire reason a project like this has to exist.
 
 ## The line is not what you would guess
 
@@ -168,24 +177,23 @@ attribution, and we would rather not assert a mechanism we cannot show.
 If those two phones are each 20% of your users, there is no version of "just quantize it"
 that does not cost one of those groups badly.
 
-**And the damage is transformer-specific.** We ran the same calibrated-int8 protocol on
-MobileNetV2, a CNN built for mobile:
+**And the effect of quantization is not predictable either.** Same Galaxy S24, same
+TFLite target, same int8 settings, same calibration procedure — three models:
 
-| model | S24 fp32 | S24 int8 | penalty |
-|---|---:|---:|---:|
-| ViT-base | 6.73 ms *(cv 0.6%)* | 56.17 ms *(cv 0.4%)* | **8.4×** |
-| MobileNetV2 | 0.355 ms *(cv 7.9%)* | 0.375 ms *(cv 13.1%)* | **not resolvable** |
+| model | fp32 | int8 | effect |
+|---|---:|---:|---|
+| **ResNet-50** | 1.461 ms *(cv 4.5%)* | **0.646 ms** *(cv 6.7%)* | **2.26× faster** |
+| MobileNetV2 | 0.355 ms *(cv 7.9%)* | 0.375 ms *(cv 13.1%)* | inside the noise |
+| **ViT-base** | 6.725 ms *(cv 0.6%)* | **56.169 ms** *(cv 0.4%)* | **8.35× slower** |
 
-On the CNN, int8 costs nothing like the 8.4× it costs the transformer — that contrast is
-large and unambiguous. But we will not put a number on MobileNetV2's penalty: 0.355
-against 0.375 ms at 8–13% coefficient of variation is **inside the noise**. A sub-
-millisecond model on hosted hardware is at the floor of what this method resolves, and an
-earlier version of this post claimed "1.03×" from those figures, which the variance does
-not support. So 8.4× is not what quantization does in
-general — it is what per-tensor int8 does to attention, where tensors with very different
-dynamic ranges force conversion boundaries throughout. Node counts rise by a similar
-*ratio* in both cases (65→104 and 544→921), but MobileNetV2's graph is small enough that
-the added boundaries barely register.
+A **19× spread** in what quantization does to you, from a 2.26× win to an 8.35× loss,
+decided by nothing but which model you happened to bring.
+
+The node counts are suggestive: ResNet-50 goes 78 → 81 on quantization, MobileNetV2
+65 → 104, ViT-base 544 → 921. The model that barely gains conversion boundaries gains
+speed; the one that gains hundreds loses badly. We offer that as a hypothesis and not a
+rule — we have not measured node-level attribution, and this page has already had two
+tidy explanations fail.
 
 **One caveat remains.** Our calibration set is thin — eight samples derived from one
 input, where real calibration uses hundreds of representative examples — and a better set
