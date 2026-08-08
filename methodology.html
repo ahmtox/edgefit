@@ -95,6 +95,9 @@ tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--plane); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .dim { color: var(--muted); }
+/* Cross-vendor marker: this fallback figure was measured through a toolchain that
+   cannot reach the SoC's own accelerator, so it is not a partitioning verdict. */
+.xv { color: var(--muted); cursor: help; font-size: 0.85em; }
 .win { color: var(--good-text); font-weight: 600; }
 .lose { color: var(--critical); font-weight: 600; }
 
@@ -144,12 +147,12 @@ Every number reproducible; every failure recorded.</p></header>
 <nav class="site"><a href="">The matrix</a><a href="models/">Models</a><a href="devices/">Devices</a><a href="compare.html">Compare</a><a href="methodology.html" class="here">Methodology</a><a href="data/">Data</a><span class="spacer"></span>
 <button class="theme" type="button">theme</button></nav>
 
-<div class="banner"><strong>Read this before citing anything here.</strong><p>These 229 measurements do not all come from the same place, and the conditions behind them differ.</p><p>125 of them were measured by us on <em>one</em> laptop-class
+<div class="banner"><strong>Read this before citing anything here.</strong><p>These 246 measurements do not all come from the same place, and the conditions behind them differ.</p><p>125 of them were measured by us on <em>one</em> laptop-class
 machine, gated for AC power, low-power mode off, nominal thermal state and verified
 available compute — but there is no second unit of the same SKU to cross-check
 against, so the <a href="methodology.html#two-unit">two-unit test</a> has not been
 run. Treat those as dev-grade figures that are honest about their own conditions, not
-as lab results. Laptop thermals also differ from a rack-mounted machine.</p><p>104 rows were measured on <strong>Qualcomm AI Hub</strong>'s hosted
+as lab results. Laptop thermals also differ from a rack-mounted machine.</p><p>121 rows were measured on <strong>Qualcomm AI Hub</strong>'s hosted
 phones, marked <span class="thirdparty">3P</span> throughout. Our own gating does not
 apply to them: their thermal state is not exposed, the run count is theirs, and their
 timing excludes model load and host-side framework overhead, so those rows read faster
@@ -354,7 +357,7 @@ numbers. There is a regression test that allocates a known amount and checks the
 result lands near it.</p>
 
 <h3 id="failures">Failures are published</h3>
-<p>19 of 229 rows in this corpus are failures, and
+<p>21 of 246 rows in this corpus are failures, and
 they are in the data download along with everything else. A recipe that will not lower,
 or a delegate that aborts the process outright, is a fact about the toolchain that is
 expensive to rediscover.</p>
@@ -403,8 +406,8 @@ accelerator's losses using the FLOP-fallback figure. That explanation was wrong,
 the section above says so.</p>
 
 <footer class="site">
-edgefit 0.1.1 · harness 0.3.11 ·
-generated 2026-08-08 01:32 EDT<br>
+edgefit 0.1.1 · harness 0.3.14 ·
+generated 2026-08-08 15:38 EDT<br>
 Corpus is append-only and immutable: a re-measurement is a new row, never an edit.
 </footer>
 </div>
