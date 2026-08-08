@@ -20,15 +20,17 @@ Product strategy and roadmap are not published.
 **[Your accelerator probably isn't running your model](docs/silent-fallback.md)**
 
 Five models — three text, two vision — each exported once to fp32 ONNX and profiled on
-up to eleven mobile SoCs from Qualcomm, Google and Samsung.
+**30 devices from four silicon vendors**: phones, Windows-on-ARM laptops, automotive
+boards and embedded vision kits.
 
-**Every device is either fully accelerated on every model, or runs every node on the
-CPU.** Not one mixed case in 45 measurements. Three SoCs accelerate; eight do not — no
-error, no warning, correct results throughout. Fastest 6.26 ms, slowest 820.37 ms:
-**131× on the same file.**
+**Every device either runs the whole graph on its accelerator, or every node on the
+CPU.** No middle. On ViT-base it is nine devices each way and the groups are **223×
+apart** — no error, no warning, correct results throughout.
 
-Two 2024 flagships, same artifacts: Galaxy S24 vs Pixel 9 runs **15× to 40× apart**
-depending on the model.
+The line is not recency (Tensor G5 in the Pixel 10 falls back, like G2–G4 before it),
+not vendor (six Qualcomm parts fall back too), and not form factor. Laptop against
+laptop, same file: **Snapdragon X2 Elite 4.42 ms against an M2 at 71.54 ms through
+CoreML** — 16× between directly competing products.
 
 And the mirror image on Apple: ONNX Runtime's CoreML provider makes **four of six
 models slower** than plain CPU, also silently.
@@ -49,8 +51,8 @@ uv run edgefit corpus export           # Parquet + CSV
 uv run edgefit verify                  # golden fixtures — the gate for everything after
 ```
 
-Corpus today: **110 measurements** over 7 models and 16 devices — 12 SoCs from Apple,
-Qualcomm, Google and Samsung — of which **22 rows are recorded failures**.
+Corpus today: **339 measurements** over 7 models and 30 devices — four silicon vendors,
+four form factors — of which **48 rows are recorded failures**.
 
 | | |
 |---|---|

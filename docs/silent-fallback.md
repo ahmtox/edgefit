@@ -1,58 +1,80 @@
 # Your accelerator probably isn't running your model
 
-*Measured on 16 devices across four silicon vendors. Nothing errored.*
+*30 devices · four silicon vendors · phones, laptops, cars and embedded boards. Nothing errored.*
 
 ---
 
 ## The short version
 
 We took five models — three text encoders and two vision — exported each once to fp32
-ONNX, and profiled those artifacts on up to eleven mobile SoCs from Qualcomm, Google and
-Samsung.
+ONNX, and profiled those artifacts across **30 devices from four silicon vendors**,
+spanning phones, Windows-on-ARM laptops, automotive boards and embedded vision kits.
 
-**Three of them ran it on the NPU. Eight ran every single node on the CPU.**
+**Every device either runs the whole graph on its accelerator, or every node on the
+CPU.** There is no middle. On ViT-base the split is exactly nine devices each way, and
+the two groups are **223× apart**.
 
-No error. No warning. No log line. Correct results everywhere. The fastest accelerated
-device runs it in **6.26 ms**; the slowest CPU-only device takes **820.37 ms**. That is
-**131× end to end**, for the same file.
+Nothing errors anywhere. Every device returns correct results.
 
-| device | SoC | vendor | p50 | on accelerator |
-|---|---|---|---:|---:|
-| Snapdragon 8 Elite QRD | sm8750 | Qualcomm | **6.26 ms** | 429/429 |
-| Samsung Galaxy S24 | sm8650 | Qualcomm | **7.68 ms** | 429/429 |
-| Samsung Galaxy S23 | sm8550 | Qualcomm | **10.94 ms** | 429/429 |
-| Google Pixel 9 | google-tensor-g4 | Google | 303.76 ms | 0/401 |
-| Google Pixel 7 | google-tensor-g2 | Google | 328.49 ms | 0/401 |
-| Samsung Galaxy Note 20 | samsung-exynos-990 | Samsung | 351.44 ms | 0/401 |
-| Samsung Galaxy S21 | sm8350 | Qualcomm | 380.07 ms | 0/401 |
-| Google Pixel 8 | google-tensor-g3 | Google | 444.12 ms | 0/401 |
-| Google Pixel 5 | sm7250 | Qualcomm | 750.98 ms | 0/401 |
-| Samsung Galaxy A53 5G | samsung-exynos-1280 | Samsung | 780.79 ms | 0/401 |
-| Google Pixel 3 | sdm845 | Qualcomm | 820.37 ms | 0/401 |
+| | device | SoC | p50 |
+|---|---|---|---:|
+| **NPU** | Snapdragon X2 Elite CRD | sc8480xp | **4.42 ms** |
+| **NPU** | Snapdragon 8 Elite QRD | sm8750 | 6.26 ms |
+| **NPU** | Samsung Galaxy S24 | sm8650 | 7.68 ms |
+| **NPU** | Snapdragon X Plus 8-Core | sc8340xp | 10.70 ms |
+| **NPU** | Samsung Galaxy S23 | sm8550 | 11.01 ms |
+| **NPU** | Snapdragon X Elite CRD | sc8380xp | 11.51 ms |
+| **NPU** | SA8775P ADP *(automotive)* | sa8775p | 13.75 ms |
+| **NPU** | SA8295P ADP *(automotive)* | sa8295p | 16.72 ms |
+| **NPU** | Dragonwing IQ-9075 EVK *(embedded)* | qcs9075 | 17.28 ms |
+| CPU | Google Pixel 10 | tensor-g5 | 264.26 ms |
+| CPU | Google Pixel 9 | tensor-g4 | 308.80 ms |
+| CPU | Snapdragon 7 Gen 4 QRD | sm7750 | 354.83 ms |
+| CPU | Samsung Galaxy A73 5G | sm7325 | 390.35 ms |
+| CPU | Samsung Galaxy Tab S7 | sm8250 | 463.10 ms |
+| CPU | Google Pixel 4 | sm8150 | 465.26 ms |
+| CPU | Dragonwing RB3 Gen 2 *(embedded)* | qcs6490 | 708.96 ms |
+| CPU | Xiaomi Redmi Note 10 5G | sm6150 | 894.80 ms |
+| CPU | Samsung Galaxy A14 5G | exynos-1330 | 987.58 ms |
 
-Model: `google/vit-base-patch16-224-in21k`, fp32 ONNX, batch 1, 224×224.
+Model: `google/vit-base-patch16-224-in21k`, fp32 ONNX, batch 1, 224×224. The four text
+and vision models reproduce the split device-for-device.
 
-**The split is not about the model — it is entirely about the SoC.** Every device is
-either fully accelerated on *every* model, or fully on the CPU for *every* model. There
-is not one mixed case in 45 measurements:
+## The line is not what you would guess
 
-| device | SoC | models accelerated |
-|---|---|---|
-| Snapdragon 8 Elite QRD | sm8750 | **6 of 6** |
-| Samsung Galaxy S24 | sm8650 | **5 of 5** |
-| Samsung Galaxy S23 | sm8550 | **5 of 5** |
-| Google Pixel 7 / 9 | tensor-g2 / g4 | 0 of 5 |
-| Samsung Galaxy S21 | sm8350 | 0 of 5 |
-| Google Pixel 3 | sdm845 | 0 of 5 |
-| Samsung Galaxy A53 5G | exynos-1280 | 0 of 5 |
+It is not recency. **Google's Tensor G5, shipping in the Pixel 10, runs every node on
+the CPU** — as do G2, G3 and G4 before it. Five generations, same behaviour.
 
-Text models behave identically to vision ones. `all-MiniLM-L6-v2` puts 226 of 226 nodes
-on a Galaxy S24's NPU and runs in **1.52 ms**; on a Pixel 9 it runs entirely on the CPU
-at 23.34 ms. `toxic-comment` and `bart-base` reproduce the same split exactly.
+It is not vendor. Six *Qualcomm* parts in that table fall back completely: sm6150,
+sm7325, sm7750, sm8150, sm8250 and the qcs6490 vision kit.
 
-## The number that should bother you
+It is not form factor. Two automotive boards and one embedded kit accelerate; another
+embedded kit from the same product family does not.
 
-Look at two phones from the same year, at the same price point, in the same pocket:
+What actually predicts it, in this data, is **Snapdragon 8-series and X-series
+silicon** — plus the automotive and embedded parts built on the same Hexagon
+generation. Everything else, from any vendor, in any form factor, silently runs on the
+CPU.
+
+## Laptop against laptop
+
+Until now the comparison was open to an easy objection: our Apple numbers came from a
+laptop and our Qualcomm numbers from phones. The Snapdragon X series closes that. Same
+model, same file, same class of machine:
+
+| laptop-class chip | p50 | on accelerator |
+|---|---:|---|
+| **Snapdragon X2 Elite** | **4.42 ms** | 429/429 |
+| Snapdragon X Plus 8-Core | 10.70 ms | 429/429 |
+| Snapdragon X Elite | 11.51 ms | 429/429 |
+| Apple M2 — CoreML | 71.54 ms | ~50% fell back |
+| Apple M2 — CPU | 105.53 ms | — |
+
+**16× between directly competing products in the same form factor**, and the X chips
+take every node while the CoreML EP declines roughly half the graph on the identical
+file.
+
+## Two phones from the same year, in the same pocket
 
 | model | Galaxy S24 | Pixel 9 | gap |
 |---|---:|---:|---:|
@@ -228,6 +250,13 @@ uv run edgefit atlas build   # the whole corpus as a static site
 Requires a free Qualcomm AI Hub account for the hosted devices. The Apple measurements
 need a Mac and will refuse to run if the machine is not idle.
 
-*Corpus at time of writing: 110 measurements, 7 models, 16 devices and 12 SoCs across
-four silicon vendors — 15 hosted phones plus one Mac. 22 of those rows are recorded
-failures. Every number above is a row in it.*
+*Corpus at time of writing: **339 measurements** over 7 models and 30 devices across
+four silicon vendors, including **48 recorded failures**. Every number above is a row in
+it.*
+
+*The [atlas](https://ahmtox.github.io/edgefit) renders **214** of those — the current
+generation. The other 125 are rows a later harness version re-measured on the same
+cell, kept because measurements are immutable and an old row is a truthful record of
+what that instrument reported, but not shown because publishing four generations side
+by side would average figures we have since corrected. The full set is in the
+[downloadable snapshot](https://github.com/ahmtox/edgefit/tree/main/data).*
