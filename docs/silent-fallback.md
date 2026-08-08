@@ -133,22 +133,14 @@ simply decline fp32 outright — which would be a completely reasonable thing fo
 do. What we measured is not silicon quality. It is *what happens to a model you hand to
 a device without tuning it*, which is the situation every team starts in.
 
-> **Provenance note on this section.** The quantization and MobileNetV2 numbers below
-> were produced by ad-hoc scripts driving Qualcomm AI Hub directly, **not** by the
-> harness. They are therefore *not* in the corpus, not in the downloadable snapshot, and
-> not reproducible with an `edgefit` command — unlike every other figure in this post.
-> Compile-and-quantize is being added as a first-class recipe axis so they can be
-> re-measured properly; until that lands, treat this section as a preliminary experiment
-> rather than a corpus result. Saying so is cheaper than being caught.
-
 **We tested int8, and the answer inverts the usual advice.** This was the obvious
 objection — *you only measured fp32, of course an NPU declined it* — so here is the
 result. ViT-base, every artifact built by AI Hub's own compiler:
 
-| device | fp32 | int8 uncalibrated | int8 **calibrated** |
+| device | fp32 | int8 **calibrated** | penalty |
 |---|---:|---:|---:|
-| Samsung Galaxy S24 — *accelerates fp32* | **6.72 ms** | 15.38 ms | **56.22 ms** |
-| Google Pixel 9 — *falls back on fp32* | 291.10 ms | 410.51 ms | **144.91 ms** |
+| Samsung Galaxy S24 — *accelerates fp32* | **6.73 ms** *(cv 0.6%)* | **56.17 ms** *(cv 0.4%)* | **8.4× worse** |
+| Google Pixel 9 — *falls back on fp32* | 306.09 ms *(cv 9.0%)* | **146.70 ms** *(cv 9.6%)* | **2.1× better** |
 
 **On the S24, calibrated int8 is 8.4× slower. On the Pixel 9, it is 2.0× faster.** Same
 model, same compiler, same flags, opposite conclusions — decided entirely by whether the
@@ -181,10 +173,15 @@ MobileNetV2, a CNN built for mobile:
 
 | model | S24 fp32 | S24 int8 | penalty |
 |---|---:|---:|---:|
-| ViT-base | 6.72 ms | 56.22 ms | **8.4×** |
-| MobileNetV2 | 0.36 ms | 0.37 ms | **1.03×** |
+| ViT-base | 6.73 ms *(cv 0.6%)* | 56.17 ms *(cv 0.4%)* | **8.4×** |
+| MobileNetV2 | 0.355 ms *(cv 7.9%)* | 0.375 ms *(cv 13.1%)* | **not resolvable** |
 
-On a CNN, calibrated int8 is essentially free. So 8.4× is not what quantization does in
+On the CNN, int8 costs nothing like the 8.4× it costs the transformer — that contrast is
+large and unambiguous. But we will not put a number on MobileNetV2's penalty: 0.355
+against 0.375 ms at 8–13% coefficient of variation is **inside the noise**. A sub-
+millisecond model on hosted hardware is at the floor of what this method resolves, and an
+earlier version of this post claimed "1.03×" from those figures, which the variance does
+not support. So 8.4× is not what quantization does in
 general — it is what per-tensor int8 does to attention, where tensors with very different
 dynamic ranges force conversion boundaries throughout. Node counts rise by a similar
 *ratio* in both cases (65→104 and 544→921), but MobileNetV2's graph is small enough that
@@ -326,10 +323,9 @@ uv run edgefit atlas build   # the whole corpus as a static site
 Requires a free Qualcomm AI Hub account for the hosted devices. The Apple measurements
 need a Mac and will refuse to run if the machine is not idle.
 
-*Corpus at time of writing: **339 measurements** over 7 models and 30 devices across
-four silicon vendors, including **48 recorded failures**. Every number above is a row in
-it, **except the quantization and MobileNetV2 section**, which is flagged in place and
-awaiting harness support.*
+*Corpus at time of writing: **347 measurements** over 8 models and 30 devices across four
+silicon vendors, including 48 recorded failures. Every number above is a row in it, and
+every row carries the `edgefit` command that reproduces it.*
 
 *The [atlas](https://ahmtox.github.io/edgefit) renders **214** of those — the current
 generation. The other 125 are rows a later harness version re-measured on the same
