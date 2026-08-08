@@ -168,11 +168,23 @@ attribution, and we would rather not assert a mechanism we cannot show.
 If those two phones are each 20% of your users, there is no version of "just quantize it"
 that does not cost one of those groups badly.
 
-**Two caveats we would rather state than have pointed out.** Our calibration set is thin —
-eight samples derived from one input, where real calibration uses hundreds of
-representative examples — and a better set would plausibly move both numbers. And this is
-one model: ViT is a transformer, per-tensor int8 across attention is known to be
-difficult, and a CNN would very likely behave differently.
+**And the damage is transformer-specific.** We ran the same calibrated-int8 protocol on
+MobileNetV2, a CNN built for mobile:
+
+| model | S24 fp32 | S24 int8 | penalty |
+|---|---:|---:|---:|
+| ViT-base | 6.72 ms | 56.22 ms | **8.4×** |
+| MobileNetV2 | 0.36 ms | 0.37 ms | **1.03×** |
+
+On a CNN, calibrated int8 is essentially free. So 8.4× is not what quantization does in
+general — it is what per-tensor int8 does to attention, where tensors with very different
+dynamic ranges force conversion boundaries throughout. Node counts rise by a similar
+*ratio* in both cases (65→104 and 544→921), but MobileNetV2's graph is small enough that
+the added boundaries barely register.
+
+**One caveat remains.** Our calibration set is thin — eight samples derived from one
+input, where real calibration uses hundreds of representative examples — and a better set
+would plausibly move the transformer numbers.
 
 **Three SoCs accelerating is not a Qualcomm endorsement.** The three that worked are
 Snapdragon 8-series Gen 2 and newer. Three *other* Qualcomm parts in this table — sdm845,
