@@ -41,6 +41,8 @@ except _md.PackageNotFoundError:  # running from a source tree without an instal
 # 0.3.10: local warm_load is abandoned as unmeasurable in-process and recorded as
 # null-with-reason. 0.3.9 rows carry a warm figure that is backwards on a quarter
 # of them, so they are not comparable.
-HARNESS_VERSION = "0.3.10"
+# 0.3.11: hosted recipes can quantize and compile before profiling, so the artifact
+# measured may not be the ONNX we uploaded. That changes what a row means.
+HARNESS_VERSION = "0.3.11"
 
 __all__ = ["__version__", "HARNESS_VERSION"]

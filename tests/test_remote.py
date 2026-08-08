@@ -6,6 +6,8 @@ corpus — warmup handling, provenance honesty, and per-node placement parsing.
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 from pydantic import ValidationError
 
@@ -288,10 +290,26 @@ class TestProfileOptions:
         """`all` is the service default; sending it would claim a constraint we did not set."""
         assert _profile_options(_recipe(QaiHubComputeUnit.ALL).runtime) is None
 
-    def test_no_compile_only_flag_can_be_expressed(self) -> None:
-        """`target_runtime` is gone from the schema, not merely unsent."""
-        with pytest.raises(ValidationError):
-            QaiHubRuntimeConfig(device_name="Samsung Galaxy S24 (Family)", target_runtime="tflite")
+    def test_target_runtime_is_not_sent_to_a_profile_job(self) -> None:
+        """It is a compile-job flag, and profile jobs reject it outright.
+
+        `target_runtime` is expressible again — compile works, so the field is honoured
+        by compiling before profiling. But it must never reach the *profile* options, or
+        the job fails with `unrecognized arguments`. That is the invariant this replaces
+        the old "the field cannot exist" test with.
+        """
+        recipe = QaiHubRuntimeConfig(
+            device_name="Samsung Galaxy S24 (Family)", target_runtime="tflite"
+        )
+        assert _profile_options(recipe) is None
+
+    def test_quantization_requires_a_target_runtime(self) -> None:
+        """A quantized model still has to be lowered to something runnable."""
+        with pytest.raises(ValidationError, match="needs a target_runtime"):
+            QaiHubRuntimeConfig(
+                device_name="Samsung Galaxy S24 (Family)",
+                quantize={"weights_dtype": "int8"},
+            )
 
 
 class TestInputSynthesis:
@@ -374,3 +392,80 @@ class TestFirstInferenceCost:
         assert metrics is not None
         assert metrics.first_inference_ms is None
         assert "first run" in metrics.unavailable["first_inference_ms"]
+
+
+class TestQuantizeAndCompile:
+    """Hosted recipes that quantize and compile before profiling.
+
+    This axis was removed once and is back, so the tests pin the reasons it is safe
+    now: the compile-only flag never reaches profile options, quantization cannot be
+    requested without somewhere to compile it to, and the row says what was actually
+    measured.
+    """
+
+    def test_a_quantized_recipe_has_its_own_identity(self) -> None:
+        """Same model, different artifact, therefore a different recipe.
+
+        Without this a quantized run and an fp32 run would collide in the corpus and
+        the second would look like a repeat of the first.
+        """
+        base = _recipe()
+        quantized = Recipe(
+            model=base.model,
+            runtime=QaiHubRuntimeConfig(
+                device_name="Samsung Galaxy S24 (Family)",
+                target_runtime="tflite",
+                quantize={"weights_dtype": "int8", "activations_dtype": "int8"},
+            ),
+        )
+        assert quantized.recipe_id != base.recipe_id
+
+    def test_calibration_sample_count_changes_identity(self) -> None:
+        """Eight samples and eight hundred are not the same measurement."""
+        def build(n: int) -> str:
+            return Recipe(
+                model=_recipe().model,
+                runtime=QaiHubRuntimeConfig(
+                    device_name="Samsung Galaxy S24 (Family)",
+                    target_runtime="tflite",
+                    quantize={"calibration_samples": n},
+                ),
+            ).recipe_id
+
+        assert build(8) != build(64)
+
+    def test_provenance_states_the_pipeline_and_its_thinness(self) -> None:
+        """A quantized row must not read like a row profiling our own export."""
+        from edgefit.harness.remote import _pipeline_detail
+
+        runtime = QaiHubRuntimeConfig(
+            device_name="Samsung Galaxy S24 (Family)",
+            target_runtime="tflite",
+            quantize={"weights_dtype": "int8", "calibration_samples": 8},
+        )
+        detail = _pipeline_detail(runtime)
+        assert "int8" in detail
+        assert "8 calibration samples" in detail
+        assert "thin set" in detail, "the calibration set's weakness must travel with the row"
+        assert "not the ONNX we uploaded" in detail
+
+    def test_an_unquantized_recipe_adds_no_pipeline_prose(self) -> None:
+        from edgefit.harness.remote import _pipeline_detail
+
+        assert _pipeline_detail(_recipe().runtime) == ""
+
+    def test_calibration_data_is_deterministic(self) -> None:
+        """Quantization must be reproducible, so the perturbations are seeded."""
+        import tempfile
+
+        import numpy as np
+
+        from edgefit.harness.remote import _calibration_data
+        with tempfile.TemporaryDirectory() as d:
+            path = pathlib.Path(d) / "model.onnx"
+            np.savez(path.parent / "inputs.npz", pixel_values=np.zeros((1, 3, 4, 4), np.float32))
+            first = _calibration_data(path, 4)
+            second = _calibration_data(path, 4)
+        assert len(first["pixel_values"]) == 4
+        for a, b in zip(first["pixel_values"], second["pixel_values"], strict=True):
+            assert np.array_equal(a, b), "calibration data differed between runs"

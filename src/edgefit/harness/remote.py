@@ -171,6 +171,13 @@ def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> 
 
     try:
         model = hub.upload_model(str(model_path))
+        # Quantize then compile, when the recipe asks. Each stage is a separate hosted
+        # job and each can fail on its own terms, so failures are attributed to the
+        # stage that produced them rather than surfacing as "profiling failed".
+        if runtime.quantize is not None:
+            model = _quantize(hub, model, model_path, runtime)
+        if runtime.target_runtime is not None:
+            model = _compile(hub, model, device, runtime)
         job = hub.submit_profile_job(
             model=model,
             device=device,
@@ -188,6 +195,97 @@ def submit_profile(recipe: Recipe, artifact_dir: Path, *, wait: bool = True) -> 
         raise RemoteMeasurementError(f"{type(exc).__name__}: {exc}") from exc
 
     return _parse_profile(profile, job, device, getattr(hub, "__version__", "unknown"))
+
+
+
+
+def _pipeline_detail(runtime: QaiHubRuntimeConfig) -> str:
+    """What was actually measured, when it is not the ONNX we uploaded.
+
+    A row profiling a quantized, compiled artifact must not read like a row profiling
+    our own export. The quantized numbers are only interpretable alongside how they were
+    produced — uncalibrated int8 cost ViT-base 8.4x on hardware that accelerated it, so
+    "int8" alone is not a description.
+    """
+    parts = []
+    if runtime.quantize is not None:
+        q = runtime.quantize
+        parts.append(
+            f"quantized on AI Hub to weights={q.weights_dtype}/activations="
+            f"{q.activations_dtype} using {q.calibration_samples} calibration samples "
+            "derived from the artifact's pinned inputs (a thin set; real calibration "
+            "uses hundreds of representative examples)"
+        )
+    if runtime.target_runtime is not None:
+        parts.append(f"compiled by AI Hub to {runtime.target_runtime}")
+    if not parts:
+        return ""
+    return "; " + "; ".join(parts) + "; the profiled artifact is therefore not the ONNX we uploaded"
+
+
+def _calibration_data(model_path: Path, samples: int) -> dict:
+    """Real activations for the quantizer, built from the artifact's pinned inputs.
+
+    Perturbations of one pinned input, not photographs: the harness ships no image
+    assets and every number has to be reproducible by anyone from the repo alone. It is
+    a thin calibration set and the recipe records how thin — `calibration_samples` is on
+    the row precisely so nobody reads these as production-calibrated.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    with np.load(model_path.parent / "inputs.npz") as data:
+        pinned = {name: data[name] for name in data.files}
+    if not pinned:
+        raise RemoteMeasurementError(
+            f"no inputs.npz beside {model_path.name}, so there is nothing to calibrate on"
+        )
+    rng = np.random.default_rng(0)  # fixed: quantization must be reproducible
+    out = {}
+    for name, value in pinned.items():
+        base = value.astype(np.float32)
+        series = [base]
+        for _ in range(max(samples - 1, 0)):
+            series.append(base + rng.normal(0, 0.25, base.shape).astype(np.float32))
+        out[name] = series
+    return out
+
+
+def _quantize(hub, model, model_path: Path, runtime: QaiHubRuntimeConfig):
+    """Run a quantize job and return the quantized model."""
+    spec = runtime.quantize
+    assert spec is not None
+    job = hub.submit_quantize_job(
+        model=model,
+        calibration_data=_calibration_data(model_path, spec.calibration_samples),
+        weights_dtype=_dtype(hub, spec.weights_dtype),
+        activations_dtype=_dtype(hub, spec.activations_dtype),
+        name=f"edgefit quantize {spec.weights_dtype}/{spec.activations_dtype}",
+    )
+    _raise_if_failed(job, job.wait())
+    return job.get_target_model()
+
+
+def _compile(hub, model, device, runtime: QaiHubRuntimeConfig):
+    """Compile to the recipe's target runtime and return the compiled model."""
+    job = hub.submit_compile_job(
+        model=model,
+        device=device,
+        options=f"--target_runtime {runtime.target_runtime}",
+        name=f"edgefit compile {runtime.target_runtime}",
+    )
+    _raise_if_failed(job, job.wait())
+    return job.get_target_model()
+
+
+def _dtype(hub, name: str):
+    """Map our dtype string onto the client's enum, refusing rather than guessing."""
+    try:
+        return getattr(hub.QuantizeDtype, name.upper())
+    except AttributeError as exc:
+        available = [d for d in dir(hub.QuantizeDtype) if d.isupper()]
+        raise RemoteMeasurementError(
+            f"qai-hub has no quantize dtype {name!r}; available: {available}"
+        ) from exc
 
 
 def _profile_options(runtime: QaiHubRuntimeConfig) -> str | None:
@@ -450,6 +548,7 @@ def build_record(
             "timing is AI Hub's on-device inference time, which excludes model load "
             "and host-side framework overhead, so it is not end-to-end in our sense "
             "and reads faster than our own rows by that margin"
+            + _pipeline_detail(runtime)
         ),
         stress_profile=StressProfile.UNKNOWN,
         outcome=Outcome.SUCCESS,

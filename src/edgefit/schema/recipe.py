@@ -223,6 +223,33 @@ class OrtRuntimeConfig(_Frozen):
         return ",".join(str(provider) for provider in self.providers)
 
 
+class QaiHubTargetRuntime(StrEnum):
+    """Formats an AI Hub compile job can produce, in the service's own vocabulary."""
+
+    TFLITE = "tflite"
+    ONNX = "onnx"
+    QNN_DLC = "qnn_dlc"
+    QNN_CONTEXT_BINARY = "qnn_context_binary"
+
+
+class QaiHubQuantization(_Frozen):
+    """A quantize job's settings.
+
+    ``calibration_samples`` is recorded because it changes the result and because a
+    quantization claim without it is not interpretable: uncalibrated int8 made ViT-base
+    8.4x *slower* on hardware that accelerated it fully, and the sample count is the
+    difference between that and a defensible number.
+    """
+
+    weights_dtype: Literal["int8", "int4", "float16"] = "int8"
+    activations_dtype: Literal["int8", "int16", "float16"] = "int8"
+    calibration_samples: int = Field(
+        default=8,
+        gt=0,
+        description="How many inputs the quantizer observes. Real calibration uses hundreds.",
+    )
+
+
 class QaiHubComputeUnit(StrEnum):
     """Compute units a Qualcomm AI Hub job may target, in its own vocabulary."""
 
@@ -241,11 +268,16 @@ class QaiHubRuntimeConfig(_Frozen):
     honours, and a recipe field that does not affect the run is how recipes start
     lying.
 
-    That rule is why there is no ``target_runtime`` here. It reads like the obvious
-    axis — tflite vs onnx vs qnn_context_binary — but it is a *compile*-job option,
-    and profile jobs reject it outright (``unrecognized arguments:
-    --target_runtime``). Compile jobs are broken server-side, so the field could
-    only ever have been recorded and ignored. It returns when compile does.
+    ``target_runtime`` is back, and its history is worth knowing. It was removed once
+    because profile jobs reject it outright (``unrecognized arguments:
+    --target_runtime``) — it is a *compile*-job option — and compile jobs appeared to
+    be broken server-side, so the field could only have been recorded and ignored.
+    Re-testing showed compile works. So the field is honoured now: when it is set, the
+    artifact is compiled first and the *compiled* model is what gets profiled.
+
+    The rule it was removed under still holds and is what makes this safe: a field
+    that does not affect the run is how recipes start lying. Both of these change the
+    artifact, so both are part of the recipe identity.
     """
 
     kind: Literal[RuntimeKind.QAI_HUB] = RuntimeKind.QAI_HUB
@@ -260,6 +292,30 @@ class QaiHubRuntimeConfig(_Frozen):
             "decides per node, and the measured split is what gets recorded."
         ),
     )
+    target_runtime: QaiHubTargetRuntime | None = Field(
+        default=None,
+        description=(
+            "Compile the uploaded model to this runtime before profiling. None profiles "
+            "the ONNX we uploaded, unchanged. Note that qnn_dlc and qnn_context_binary "
+            "are rejected for non-Qualcomm devices by the service itself."
+        ),
+    )
+    quantize: QaiHubQuantization | None = Field(
+        default=None,
+        description=(
+            "Quantize before compiling, via a quantize job. Requires target_runtime, "
+            "because a quantized model still has to be lowered to something runnable."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_coherent(self) -> QaiHubRuntimeConfig:
+        if self.quantize is not None and self.target_runtime is None:
+            raise ValueError(
+                "quantization needs a target_runtime: a quantized model still has to be "
+                "compiled to a runnable artifact before it can be profiled"
+            )
+        return self
 
     @property
     def intended_provider(self) -> str:
