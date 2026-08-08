@@ -37,8 +37,29 @@ Nothing errors anywhere. Every device returns correct results.
 | CPU | Xiaomi Redmi Note 10 5G | sm6150 | 894.80 ms |
 | CPU | Samsung Galaxy A14 5G | exynos-1330 | 987.58 ms |
 
-Model: `google/vit-base-patch16-224-in21k`, fp32 ONNX, batch 1, 224×224. The four text
-and vision models reproduce the split device-for-device.
+Model: `google/vit-base-patch16-224-in21k`, fp32 ONNX, batch 1, 224×224. The other four
+models — two vision, three text, all of them transformers — reproduce the split
+device-for-device.
+
+### It is not purely a property of the device
+
+We later put **MobileNetV2**, a convolutional network built for mobile, through the same
+protocol. It breaks the pattern:
+
+| model | Pixel 9 | placement |
+|---|---:|---|
+| ViT-base *(transformer)* | 291.10 ms | **CPU 544 of 544** |
+| MobileNetV2 *(CNN)* | **5.01 ms** | **GPU 65 of 65** |
+
+The same Pixel 9 that declined every node of every transformer accelerates a CNN
+completely. So the honest statement is **device × architecture**, not device alone: these
+devices reject *these transformer graphs*, and a convolutional model reaches the
+accelerator on hardware that refused all five.
+
+This corrects an earlier version of this post, which said the split was "entirely about
+the SoC". It was — across the five models measured at the time, every one of which was a
+transformer. Adding a single CNN falsified the generalisation, which is about what should
+happen to a generalisation drawn from one architecture family.
 
 ## The line is not what you would guess
 

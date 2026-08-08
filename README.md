@@ -23,9 +23,12 @@ Five models — three text, two vision — each exported once to fp32 ONNX and p
 **30 devices from four silicon vendors**: phones, Windows-on-ARM laptops, automotive
 boards and embedded vision kits.
 
-**Every device either runs the whole graph on its accelerator, or every node on the
-CPU.** No middle. On ViT-base it is nine devices each way and the groups are **223×
+**Across all five, every device either runs the whole graph on its accelerator, or every
+node on the CPU.** On ViT-base it is nine devices each way and the groups are **223×
 apart** — no error, no warning, correct results throughout.
+
+But it is **device × architecture**, not device alone: a sixth model, MobileNetV2, is
+accelerated on a Pixel 9 that declined every node of all five transformers.
 
 The line is not recency (Tensor G5 in the Pixel 10 falls back, like G2–G4 before it),
 not vendor (six Qualcomm parts fall back too), and not form factor. Laptop against
