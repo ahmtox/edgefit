@@ -112,40 +112,46 @@ simply decline fp32 outright — which would be a completely reasonable thing fo
 do. What we measured is not silicon quality. It is *what happens to a model you hand to
 a device without tuning it*, which is the situation every team starts in.
 
-**We tested int8, and it does not rescue the devices that fall back.** This was the
-obvious objection — *you only measured fp32, of course an NPU declined it* — so here is
-the answer. ViT-base, compiled to TFLite by AI Hub itself:
+**We tested int8, and the answer inverts the usual advice.** This was the obvious
+objection — *you only measured fp32, of course an NPU declined it* — so here is the
+result. ViT-base, every artifact built by AI Hub's own compiler:
 
-| device | format | p50 | on accelerator |
-|---|---|---:|---|
-| Google Pixel 9 | fp32 | 291.10 ms | 0 of 544 |
-| Google Pixel 9 | **int8** | **410.51 ms** | 45 of 570 *(GPU, not TPU)* |
-| Samsung Galaxy S24 | fp32 | **6.72 ms** | 544 of 544 |
-| Samsung Galaxy S24 | **int8** | 15.38 ms | 570 of 570 |
+| device | fp32 | int8 uncalibrated | int8 **calibrated** |
+|---|---:|---:|---:|
+| Samsung Galaxy S24 — *accelerates fp32* | **6.72 ms** | 15.38 ms | **56.22 ms** |
+| Google Pixel 9 — *falls back on fp32* | 291.10 ms | 410.51 ms | **144.91 ms** |
 
-On the Pixel 9 int8 is **1.41× slower** and moves 45 nodes to the GPU, never a TPU.
+**On the S24, calibrated int8 is 8.4× slower. On the Pixel 9, it is 2.0× faster.** Same
+model, same compiler, same flags, opposite conclusions — decided entirely by whether the
+device's accelerator claimed the fp32 graph in the first place.
 
-The Galaxy S24 row is the control, and it produced the bigger surprise: the *same*
-int8 artifact runs **570 of 570 nodes on the NPU** — so the artifact is valid and the
-Pixel 9 result really is about the device — but int8 is **2.3× slower than fp32 there
-too**, on hardware that fully accelerated both. Node counts show why: 544 nodes at fp32
-becomes 570 at int8, because quantize and dequantize ops are inserted, and on silicon
-that runs fp16 quickly the conversion costs more than narrower arithmetic saves.
+"Quantize so it fits on the NPU" is the standard recommendation, and here quantizing
+*forfeited* the NPU advantage. The S24 kept all 921 nodes on its NPU and still lost 8.4×.
+The Pixel 9 never got off the CPU and still gained 2×.
 
-**One caveat matters here: we supplied no calibration data.** `--quantize_full_type
-int8` without a dataset is post-training quantization from estimated ranges, the weakest
-form. So the honest claim is that *uncalibrated int8 through this path* is slower on both
-device classes — not that int8 is a bad idea. Properly calibrated quantization is a
-different experiment and we have not run it.
+Node counts suggest why: 544 at fp32, 570 uncalibrated, **921** calibrated. Quantization
+inserts conversion boundaries and calibration inserts many more. Where an accelerator was
+already running the graph, every boundary is pure cost; where the work was falling to the
+CPU anyway, narrower integer arithmetic wins by more than the boundaries lose. We are
+calling that a hypothesis rather than a conclusion — we have not measured node-level
+attribution, and we would rather not assert a mechanism we cannot show.
 
-It is still a useful warning as it stands. A tool offering one-flag int8 as a speedup
-would, on this evidence, have shipped you a 2.3× regression.
+**The practical consequence is that no single artifact is right for a mixed fleet:**
 
-**A bound on what any Qualcomm-hosted measurement can say about Google silicon.** AI Hub
-refuses QNN compilation for non-Qualcomm devices outright — *"Device 'Google Pixel 9'
-does not support compilation to QNN"* — so Tensor and Exynos are reachable only through
-TFLite or ONNX. Reaching a Tensor TPU would need Google's own delegate, which AI Hub has
-no reason to invoke. Google's own tooling may well do better than anything measured here.
+| if you ship | S24 | Pixel 9 | worst case |
+|---|---:|---:|---:|
+| fp32 everywhere | 6.72 *(best)* | 291.10 | **2.0× penalty** |
+| calibrated int8 everywhere | 56.22 | 144.91 *(best)* | **8.4× penalty** |
+| the right one per device | 6.72 | 144.91 | — |
+
+If those two phones are each 20% of your users, there is no version of "just quantize it"
+that does not cost one of those groups badly.
+
+**Two caveats we would rather state than have pointed out.** Our calibration set is thin —
+eight samples derived from one input, where real calibration uses hundreds of
+representative examples — and a better set would plausibly move both numbers. And this is
+one model: ViT is a transformer, per-tensor int8 across attention is known to be
+difficult, and a CNN would very likely behave differently.
 
 **Three SoCs accelerating is not a Qualcomm endorsement.** The three that worked are
 Snapdragon 8-series Gen 2 and newer. Three *other* Qualcomm parts in this table — sdm845,
