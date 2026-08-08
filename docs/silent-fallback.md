@@ -133,6 +133,14 @@ simply decline fp32 outright — which would be a completely reasonable thing fo
 do. What we measured is not silicon quality. It is *what happens to a model you hand to
 a device without tuning it*, which is the situation every team starts in.
 
+> **Provenance note on this section.** The quantization and MobileNetV2 numbers below
+> were produced by ad-hoc scripts driving Qualcomm AI Hub directly, **not** by the
+> harness. They are therefore *not* in the corpus, not in the downloadable snapshot, and
+> not reproducible with an `edgefit` command — unlike every other figure in this post.
+> Compile-and-quantize is being added as a first-class recipe axis so they can be
+> re-measured properly; until that lands, treat this section as a preliminary experiment
+> rather than a corpus result. Saying so is cheaper than being caught.
+
 **We tested int8, and the answer inverts the usual advice.** This was the obvious
 objection — *you only measured fp32, of course an NPU declined it* — so here is the
 result. ViT-base, every artifact built by AI Hub's own compiler:
@@ -320,7 +328,8 @@ need a Mac and will refuse to run if the machine is not idle.
 
 *Corpus at time of writing: **339 measurements** over 7 models and 30 devices across
 four silicon vendors, including **48 recorded failures**. Every number above is a row in
-it.*
+it, **except the quantization and MobileNetV2 section**, which is flagged in place and
+awaiting harness support.*
 
 *The [atlas](https://ahmtox.github.io/edgefit) renders **214** of those — the current
 generation. The other 125 are rows a later harness version re-measured on the same
