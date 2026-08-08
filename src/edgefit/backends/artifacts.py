@@ -18,11 +18,13 @@ artifact stays inside the thin runtime dependency set (PROJECT.md §8, Tier 3).
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from edgefit.backends.export_decoder import UnsupportedDecoderLowering, export_decoder
 from edgefit.backends.export_onnx import (
     DEFAULT_ARTIFACT_ROOT,
+    DEFAULT_OPSET,
     ExportedArtifact,
     artifact_key,
     export_onnx,
@@ -166,3 +168,70 @@ def resolve_artifact(
         lowering_ms=total_ms,
         was_cached=False,
     )
+
+
+@dataclass(frozen=True)
+class ArtifactAudit:
+    """One cached artifact and whether the current harness could still reach it."""
+
+    directory: Path
+    ref: str
+    size_bytes: int
+    reachable: bool
+    reason: str
+
+
+def audit_artifacts(root: Path | str = DEFAULT_ARTIFACT_ROOT) -> list[ArtifactAudit]:
+    """Which cached artifacts the current harness can still address.
+
+    Artifact directories are named by a content hash over the spec, the lowering
+    options **and the exporter version**. Bump the exporter and every existing
+    directory becomes unaddressable — correct behaviour, since the artifact is part of
+    what gets measured, but it means the cache only grows. Five exporter versions in,
+    that was 16.6 GiB of files nothing could reference.
+
+    Reachability is decided by recomputing the key from each artifact's own
+    ``meta.json`` and comparing it to the directory name, rather than by reading a
+    recorded version — because the version was never recorded, and inferring "stale"
+    from a missing field would condemn every artifact including the live ones.
+    """
+    import json  # noqa: PLC0415
+
+    from edgefit.models.registry import UnknownModelError, resolve  # noqa: PLC0415
+
+    root = Path(root)
+    out: list[ArtifactAudit] = []
+    if not root.exists():
+        return out
+
+    for directory in sorted(p for p in root.iterdir() if p.is_dir()):
+        size = sum(f.stat().st_size for f in directory.rglob("*") if f.is_file())
+        meta_path = directory / "meta.json"
+        if not meta_path.exists():
+            out.append(ArtifactAudit(directory, "?", size, False, "no meta.json"))
+            continue
+        try:
+            meta = json.loads(meta_path.read_text())
+            ref = meta.get("ref", "?")
+            spec = resolve(ref, infer=False)
+        except (UnknownModelError, ValueError, OSError) as exc:
+            # Inferred (unregistered) models cannot be re-resolved offline, so their
+            # artifacts are left alone rather than deleted on a technicality.
+            out.append(
+                ArtifactAudit(directory, meta.get("ref", "?"), size, True,
+                              f"kept: cannot verify offline ({type(exc).__name__})")
+            )
+            continue
+
+        frozen = directory.name.endswith("__frozen")
+        expected = artifact_key(
+            spec, meta.get("opset", DEFAULT_OPSET), bool(meta.get("static_shapes", True)), frozen
+        )
+        matches = expected in directory.name
+        out.append(
+            ArtifactAudit(
+                directory, ref, size, matches,
+                "current" if matches else "built by a superseded exporter version",
+            )
+        )
+    return out

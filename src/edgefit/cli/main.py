@@ -703,6 +703,58 @@ def stress_cmd(
         )
 
 
+@app.command("artifacts")
+def artifacts_cmd(
+    prune: Annotated[
+        bool, typer.Option(help="Delete unreachable artifacts. Off by default.")
+    ] = False,
+) -> None:
+    """Show cached artifacts, and optionally delete the ones nothing can reach.
+
+    Artifact directories are named by a hash over the spec, the lowering options and
+    the exporter version — so bumping the exporter makes every existing directory
+    unaddressable. That is correct, because the artifact is part of what gets measured,
+    but it means the cache only ever grows. Deleting is safe: every artifact is
+    regenerable from its recipe, and nothing in the corpus depends on the files.
+
+    Reports by default and deletes only when asked, because "free 11 GiB" is not a
+    thing to do as a side effect of looking.
+    """
+    from edgefit.backends.artifacts import audit_artifacts  # noqa: PLC0415
+
+    audit = audit_artifacts()
+    live = [a for a in audit if a.reachable]
+    stale = [a for a in audit if not a.reachable]
+    gib = lambda rows: sum(a.size_bytes for a in rows) / 1024**3  # noqa: E731
+
+    table = Table(show_header=True, header_style="bold", box=None)
+    table.add_column("state")
+    table.add_column("dirs", justify="right")
+    table.add_column("size", justify="right")
+    table.add_row("reachable", str(len(live)), f"{gib(live):.2f} GiB")
+    table.add_row("unreachable", str(len(stale)), f"{gib(stale):.2f} GiB")
+    console.print(table)
+
+    if not stale:
+        console.print(f"\n{_OK}  nothing to prune")
+        return
+    if not prune:
+        console.print(
+            f"\n[dim]{gib(stale):.2f} GiB is addressable by no recipe — built by "
+            "superseded exporter versions. Re-run with [bold]--prune[/bold] to delete; "
+            "every one is regenerable.[/dim]"
+        )
+        return
+
+    import shutil  # noqa: PLC0415
+
+    freed = 0
+    for entry in stale:
+        shutil.rmtree(entry.directory, ignore_errors=True)
+        freed += entry.size_bytes
+    console.print(f"\n{_OK}  removed {len(stale)} directories, freed {freed / 1024**3:.2f} GiB")
+
+
 @app.command("sweep-remote")
 def sweep_remote_cmd(
     model: Annotated[
