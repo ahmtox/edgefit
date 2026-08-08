@@ -1,8 +1,9 @@
 # Qualcomm AI Hub — device access
 
-Originally written 2026-08-03 as a blocker report. **Rewritten 2026-08-04: the
-blocker was misdiagnosed and does not exist.** Devices provision fine. A narrower,
-real defect remains in *compile* jobs.
+Originally written 2026-08-03 as a blocker report. Rewritten 2026-08-04 when the
+blocker turned out to be misdiagnosed. **Corrected again 2026-08-07: the narrower
+compile-job defect does not reproduce either.** Nothing about AI Hub is currently
+blocking us. Both retractions are below, in order.
 
 ---
 
@@ -58,6 +59,42 @@ is the cross-vendor breadth §12's neutrality claim needs.
 
 Note the table above already shows the effect in miniature: the three older SoCs
 ran the Gemm entirely on CPU while reporting success.
+
+## Correction, 2026-08-07: compile jobs work
+
+**The compile-job defect recorded below no longer reproduces, and a bug report
+asserting it was written and deleted unsent.**
+
+Re-tested with qai-hub 0.54.0 against the same account and the same uploaded ONNX
+model, four device-specification forms — `Device(name)` as the docs show it, the object
+returned by `get_devices()`, name plus catalogue OS, and a bare `chipset:` attribute —
+**all four submitted and all four reached SUCCESS**:
+
+```
+jg9dzn485  SUCCESS   Device("Samsung Galaxy S24 (Family)")
+jp16nz875  SUCCESS   object from get_devices()
+jgd2d1vz5  SUCCESS   name + os
+j579erd9g  SUCCESS   attributes=["chipset:qualcomm-snapdragon-8gen3"]
+```
+
+Whether Qualcomm fixed it server-side or the original diagnosis was wrong, the honest
+statement is that **we do not know which**, and it does not matter much: the claim was
+not re-verified before being written up, and that is the actual mistake. The analysis
+below was thorough about the *variations* it tried and careless about the one thing that
+mattered — checking again later, against a service whose behaviour we do not control.
+
+This is the second time on this vendor. The first was concluding devices would not
+provision at all, generalised from this same endpoint. Both times the error was treating
+one observation of a remote service as a standing fact.
+
+**Consequence, and it is a large one:** hosted rows are no longer limited to fp32 ONNX.
+The question the fleet finding raises — *does int8 recover the devices that fall back?* —
+is answerable now, and it was recorded as blocked.
+
+The original analysis is kept below, unedited, because it is the evidence trail for what
+was observed at the time.
+
+---
 
 ## The real defect: compile jobs
 

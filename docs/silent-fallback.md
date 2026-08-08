@@ -112,11 +112,15 @@ simply decline fp32 outright — which would be a completely reasonable thing fo
 do. What we measured is not silicon quality. It is *what happens to a model you hand to
 a device without tuning it*, which is the situation every team starts in.
 
-**We could not test the quantized path**, and we would like to. Qualcomm AI Hub's
-compile jobs are rejected server-side on our account, so we cannot produce the
-`.tflite` or QNN context binaries that would answer "does int8 recover these eight
-devices?". That question is the obvious next one and we are blocked on it. If you can
-answer it, please do — the harness is open.
+**The quantized path is the obvious next test, and it is now unblocked.** We spent
+some time believing AI Hub's compile jobs were broken for our account, which would have
+made quantized artifacts impossible to produce. Re-testing showed they work. Whether
+that is a fix on their side or an error on ours we genuinely cannot say — but the
+consequence is that *"does int8 recover the devices that fall back?"* is a question we
+can answer rather than one we are stuck on, and the answer is not in this post yet.
+
+Until it is, read the table above as a statement about **fp32 out of the box**, not
+about what those accelerators can do when given a model in the format they want.
 
 **Three SoCs accelerating is not a Qualcomm endorsement.** The three that worked are
 Snapdragon 8-series Gen 2 and newer. Three *other* Qualcomm parts in this table — sdm845,

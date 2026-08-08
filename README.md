@@ -95,9 +95,10 @@ Stated here rather than buried, because the gaps are the reason to trust the res
   closest substitute, but they are different products — a disagreement could have been
   real rather than methodological.
 - **Apple numbers are dev-grade.** One laptop-class machine, no second unit.
-- **No quantized path on hosted devices.** AI Hub compile jobs are rejected server-side,
-  so hosted rows are fp32 only — and "does int8 recover those eight devices?" is
-  therefore the one question our headline finding raises that we cannot answer.
+- **No quantized hosted rows yet.** Every hosted row is fp32, so the fleet result
+  describes fp32 out of the box rather than what those accelerators can do with a model
+  in their preferred format. Compile jobs work, so this is unfinished rather than
+  blocked — "does int8 recover them?" is the next measurement, not an obstacle.
 - **No power instrumentation, no thermal soak, no accuracy tier.** All null with
   recorded reasons rather than estimated.
 
