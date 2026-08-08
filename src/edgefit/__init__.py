@@ -44,6 +44,8 @@ except _md.PackageNotFoundError:  # running from a source tree without an instal
 # 0.3.11: hosted recipes can quantize and compile before profiling, so the artifact
 # measured may not be the ONNX we uploaded. That changes what a row means.
 # 0.3.12: hierarchical configs no longer crash the exporter.
-HARNESS_VERSION = "0.3.12"
+# 0.3.13: hosted rows carry a graph fingerprint. Rows without one cannot join the
+# fingerprint-to-placement question at all, which is what the cross-vendor rows exist for.
+HARNESS_VERSION = "0.3.13"
 
 __all__ = ["__version__", "HARNESS_VERSION"]
