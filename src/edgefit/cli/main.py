@@ -523,6 +523,17 @@ def measure_remote_cmd(
     compute_unit: Annotated[
         str, typer.Option(help="Compute unit to ask AI Hub for: all, npu, gpu, cpu.")
     ] = "all",
+    target_runtime: Annotated[
+        str | None,
+        typer.Option(help="Compile before profiling: tflite, onnx, qnn_dlc, qnn_context_binary."),
+    ] = None,
+    quantize: Annotated[
+        str | None,
+        typer.Option(help="Quantize before compiling, e.g. int8. Requires --target-runtime."),
+    ] = None,
+    calibration_samples: Annotated[
+        int, typer.Option(help="Inputs the quantizer observes. Real calibration uses hundreds.")
+    ] = 8,
 ) -> None:
     """Profile a model on Qualcomm AI Hub's hosted devices.
 
@@ -567,7 +578,20 @@ def measure_remote_cmd(
         for name in devices:
             recipe = Recipe(
                 model=ModelRef(ref=spec.ref, task=spec.task),
-                runtime=QaiHubRuntimeConfig(device_name=name, compute_unit=compute_unit),
+                runtime=QaiHubRuntimeConfig(
+                    device_name=name,
+                    compute_unit=compute_unit,
+                    target_runtime=target_runtime,
+                    quantize=(
+                        {
+                            "weights_dtype": quantize,
+                            "activations_dtype": quantize,
+                            "calibration_samples": calibration_samples,
+                        }
+                        if quantize
+                        else None
+                    ),
+                ),
                 lowering={"static_shapes": spec.exporter != "decoder"},
             )
             try:
