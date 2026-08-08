@@ -57,9 +57,17 @@ Then we ran a second CNN.
 
 **Two CNNs, opposite outcomes.** ResNet-50 falls back on the Pixel 9, the Pixel 10 and
 the Galaxy A14 exactly as the transformers do. So "CNNs reach the accelerator and
-transformers don't" is false, and MobileNetV2 is the exception rather than the rule —
-plausibly because it is *the* canonical mobile network, the one every delegate's supported
-op set is built around.
+transformers don't" is false.
+
+We have since measured more models on that Pixel 9, and the count is now stark:
+
+| accelerated | fell back entirely |
+|---|---|
+| MobileNetV2 | ViT-base · CLIP-ViT · DeiT-Small · all-MiniLM-L6-v2 · bart-base · toxic-comment · ResNet-50 · ConvNeXt-Tiny · EfficientNet-B0 |
+
+**Nine models fall back. One does not.** MobileNetV2 is not representative of CNNs, or of
+anything — it looks like the model the delegate was tuned against, which is a different
+and less comfortable claim than "CNNs work".
 
 This is the second generalisation about this data we have had to withdraw. The first
 claimed the split was purely the SoC; five transformers supported it and one CNN killed
@@ -85,6 +93,29 @@ What actually predicts it, in this data, is **Snapdragon 8-series and X-series
 silicon** — plus the automotive and embedded parts built on the same Hexagon
 generation. Everything else, from any vendor, in any form factor, silently runs on the
 CPU.
+
+## A third failure mode: not fallback, refusal
+
+Falling back to CPU is the quiet failure. There is a louder one.
+
+**EfficientNet-B0 does not run at all on Qualcomm hardware.** Not slowly — it fails, on
+both a Galaxy S24 and a Snapdragon X Elite, while running fine on the Pixel 9's CPU. The
+cause is a single node:
+
+```
+Node '/inner/efficientnet/pooler/AveragePool_token_366'
+  OpType:AveragePool with domain:com.ms.internal.nhwc
+```
+
+One `AveragePool` in the pooling head, in an ONNX Runtime-internal NHWC domain, and the
+whole model is unrunnable on the NPU that handles every other vision model we have
+measured.
+
+This is arguably the *good* outcome. It errors instead of silently running two orders of
+magnitude slower, so you find out in CI rather than in production. But it is a third
+distinct thing that can happen to a model you hand to a device — accelerated, silently
+demoted to CPU, or refused outright — and none of the three is predictable from the model
+card.
 
 ## Laptop against laptop
 

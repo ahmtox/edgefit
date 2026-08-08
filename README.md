@@ -31,9 +31,17 @@ But it is **the specific model on the specific device**, and not predictable fro
 architecture either. MobileNetV2 is accelerated on a Pixel 9 that declined all five
 transformers — and ResNet-50, also a CNN, falls back on it just as they do.
 
+On that Pixel 9 the count is now **nine models fall back, one does not** — MobileNetV2
+alone, which looks less like "CNNs work" and more like the model the delegate was tuned
+against.
+
 Quantization is equally unpredictable. Same device, same runtime, same int8 settings:
 ResNet-50 gets **2.26× faster**, ViT-base gets **8.35× slower**, MobileNetV2 does not
 measurably change. A 19× spread decided by which model you brought.
+
+And there is a third outcome besides accelerate-or-fall-back: **EfficientNet-B0 does not
+run at all** on a Galaxy S24 or an X Elite, killed by one `AveragePool` node in an
+internal NHWC domain, while running fine on a Pixel 9's CPU.
 
 The line is not recency (Tensor G5 in the Pixel 10 falls back, like G2–G4 before it),
 not vendor (six Qualcomm parts fall back too), and not form factor. Laptop against
