@@ -152,3 +152,49 @@ class TestResolve:
     def test_a_non_hf_ref_cannot_be_inferred(self) -> None:
         with pytest.raises(UnknownModelError, match="only 'hf:"):
             resolve("file:/tmp/model.onnx")
+
+
+class TestHierarchicalConfigs:
+    """Per-stage architectures, which crashed the exporter before they were handled.
+
+    Swin describes itself as `num_heads=[3,6,12,24]` and `depths=[2,2,6,2]` — one entry
+    per stage. `int()` on that raises, so a whole model was unexportable, surfacing as a
+    TypeError mid-export rather than as a bad number. The crash was the better failure,
+    but still a failure.
+    """
+
+    def test_a_per_stage_config_does_not_crash(self) -> None:
+        from edgefit.backends.export_onnx import architecture_from_config
+
+        class Cfg:
+            num_attention_heads = [3, 6, 12, 24]
+            num_hidden_layers = [2, 2, 6, 2]
+
+        assert architecture_from_config(Cfg()) == {"stages": 4}
+
+    def test_no_scalar_head_count_is_invented(self) -> None:
+        """There is no honest scalar for four stages with different head counts.
+
+        A max or a sum would put a number in the fingerprint that no part of the model
+        has — and the fingerprint is what a cost model indexes on. Same rule as the
+        attention variant: reported exactly, or not reported.
+        """
+        from edgefit.backends.export_onnx import architecture_from_config
+
+        class Cfg:
+            num_attention_heads = [3, 6, 12, 24]
+            num_hidden_layers = [2, 2, 6, 2]
+
+        arch = architecture_from_config(Cfg())
+        assert "n_heads" not in arch
+        assert "kv_heads" not in arch
+        assert "layers" not in arch
+
+    def test_scalar_configs_are_unaffected(self) -> None:
+        from edgefit.backends.export_onnx import architecture_from_config
+
+        class Cfg:
+            num_attention_heads = 12
+            num_hidden_layers = 12
+
+        assert architecture_from_config(Cfg()) == {"n_heads": 12, "kv_heads": 12, "layers": 12}

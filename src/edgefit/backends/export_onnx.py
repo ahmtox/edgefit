@@ -142,6 +142,18 @@ def architecture_from_config(config) -> dict[str, int]:
                 break
     if heads is None:
         return {}
+    # Hierarchical models describe themselves per stage: Swin carries
+    # num_heads=[3,6,12,24] and depths=[2,2,6,2]. `int()` on a list raises, which is
+    # how this surfaced — a crash mid-export rather than a bad number, which is the
+    # better failure but still a failure.
+    #
+    # There is no honest scalar here. Collapsing four stages to a max or a sum would
+    # put a head count in the fingerprint that no part of the model has, and the
+    # fingerprint is what a cost model indexes on. So the fields stay absent, exactly
+    # as they do when the attention variant cannot be established: reported exactly,
+    # or reported not at all.
+    if isinstance(heads, (list, tuple)) or isinstance(layers, (list, tuple)):
+        return {"stages": len(heads) if isinstance(heads, (list, tuple)) else len(layers)}
     architecture = {
         "n_heads": int(heads),
         "kv_heads": int(getattr(config, "num_key_value_heads", heads) or heads),
